@@ -110,6 +110,25 @@ img {
   background-size: 200% 100%;
   animation: geoPulse 1.2s ease-in-out infinite;
 }
+.countTd,
+.statusTd {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #57606a;
+  text-align: right;
+  border-left-width: 0;
+  border-right-width: 0;
+  min-width: 24px;
+  padding-left: 4pt;
+  padding-right: 4pt;
+}
+.countTd {
+  color: #6e7781;
+}
+.statusTd.errorStatus {
+  color: #cf222e;
+  font-weight: 600;
+}
 .timingTd {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
@@ -273,6 +292,13 @@ img {
   }
   .geoTd {
     color: #8b949e;
+  }
+  .countTd,
+  .statusTd {
+    color: #8b949e;
+  }
+  .statusTd.errorStatus {
+    color: #ff7b72;
   }
   .timingTd {
     color: #8b949e;

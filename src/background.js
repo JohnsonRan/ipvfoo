@@ -338,7 +338,7 @@ class TabInfo extends SaveableEntry {
     this.save();
   }
 
-  addDomain(domain, dflags, addr, aflags, firstMs = null) {
+  addDomain(domain, dflags, addr, aflags, firstMs = null, statusCode = null, countRequest = true) {
     let d = this.domains[domain];
     if (!d) {
       // Limit the number of domains per page, to avoid wasting RAM.
@@ -349,12 +349,16 @@ class TabInfo extends SaveableEntry {
       d = this.domains[domain] =
           new DomainInfo(this, domain, addr || "(lost)", dflags | aflags);
       d.recordFirstTiming(firstMs);
+      d.recordRequest(statusCode, countRequest);
       d.countUp();
     } else {
       const oldAddr = d.addr;
       const oldFlags = d.flags;
       const oldFirstMs = d.firstMs;
+      const oldRequestCount = d.requestCount;
+      const oldErrorStatus = d.errorStatus;
       d.recordFirstTiming(firstMs);
+      d.recordRequest(statusCode, countRequest);
 
       // Domain flags just accumulate.
       d.flags |= dflags;
@@ -367,7 +371,8 @@ class TabInfo extends SaveableEntry {
       }
       d.countUp();
       // Don't update if nothing has changed.
-      if (d.addr == oldAddr && d.flags == oldFlags && d.firstMs == oldFirstMs) {
+      if (d.addr == oldAddr && d.flags == oldFlags && d.firstMs == oldFirstMs &&
+          d.requestCount == oldRequestCount && d.errorStatus == oldErrorStatus) {
         return;
       }
     }
@@ -450,11 +455,11 @@ class TabInfo extends SaveableEntry {
     popups.pushOne(this.id(), this.getTuple(domain));
   }
 
-  // Build some [domain, addr, version, flags, firstMs, completedMs] tuples, for a popup.
+  // Build some [domain, addr, version, flags, firstMs, completedMs, requestCount, errorStatus] tuples, for a popup.
   getTuples() {
     const mainDomain = this.mainDomain || "(no domain)";
     const domains = Object.keys(this.domains).sort();
-    const mainTuple = [mainDomain, "(no address)", "?", 0, null, null];
+    const mainTuple = [mainDomain, "(no address)", "?", 0, null, null, 0, null];
     const tuples = [mainTuple];
     for (const domain of domains) {
       const d = this.domains[domain];
@@ -464,6 +469,8 @@ class TabInfo extends SaveableEntry {
         mainTuple[3] = d.flags;
         mainTuple[4] = d.firstMs;
         mainTuple[5] = d.completedMs;
+        mainTuple[6] = d.requestCount;
+        mainTuple[7] = d.errorStatus;
       } else {
         tuples.push(this.getTuple(domain));
       }
@@ -471,14 +478,14 @@ class TabInfo extends SaveableEntry {
     return tuples;
   }
 
-  // Build [domain, addr, version, flags, firstMs, completedMs] tuple, for a popup.
+  // Build [domain, addr, version, flags, firstMs, completedMs, requestCount, errorStatus] tuple, for a popup.
   getTuple(domain) {
     const d = this.domains[domain];
     if (!d) {
       // Perhaps this.domains was cleared during the request's lifetime.
       return null;
     }
-    return [domain, d.addr, d.addrVersion(), d.flags, d.firstMs, d.completedMs];
+    return [domain, d.addr, d.addrVersion(), d.flags, d.firstMs, d.completedMs, d.requestCount, d.errorStatus];
   }
 }
 
@@ -492,6 +499,8 @@ class DomainInfo {
   inhibitZero = false;
   firstMs = null;
   completedMs = null;
+  requestCount = 0;
+  errorStatus = null;
 
   constructor(tabInfo, domain, addr, flags) {
     this.tabInfo = tabInfo;
@@ -502,14 +511,23 @@ class DomainInfo {
 
   // count and DFLAG_CONNECTED will be computed from requestMap.
   toJSON() {
-    return [this.addr, this.flags & ~DFLAG_CONNECTED, this.firstMs, this.completedMs];
+    return [
+      this.addr,
+      this.flags & ~DFLAG_CONNECTED,
+      this.firstMs,
+      this.completedMs,
+      this.requestCount,
+      this.errorStatus,
+    ];
   }
 
   static fromJSON(tabInfo, domain, json) {
-    const [addr, flags, firstMs, completedMs] = json;
+    const [addr, flags, firstMs, completedMs, requestCount, errorStatus] = json;
     const d = new DomainInfo(tabInfo, domain, addr, flags);
     d.firstMs = Number.isFinite(firstMs) ? firstMs : null;
     d.completedMs = Number.isFinite(completedMs) ? completedMs : null;
+    d.requestCount = Number.isFinite(requestCount) ? requestCount : 0;
+    d.errorStatus = Number.isFinite(errorStatus) ? errorStatus : null;
     return d;
   }
 
@@ -559,6 +577,17 @@ class DomainInfo {
     return false;
   }
 
+  recordRequest(statusCode, countRequest) {
+    if (countRequest) {
+      this.requestCount++;
+    }
+    if (Number.isFinite(statusCode) && statusCode >= 400) {
+      this.errorStatus = Math.round(statusCode);
+      return true;
+    }
+    return false;
+  }
+
   countDown() {
     if (!(this.count > 0)) throw "Count went negative!";
     --this.count;
@@ -591,7 +620,7 @@ class RequestInfo extends SaveableEntry {
       if (!this.domain) {
         continue;  // still waiting for onResponseStarted
       }
-      tabInfo.addDomain(this.domain, 0, null, 0, null);
+      tabInfo.addDomain(this.domain, 0, null, 0, null, null, false);
     }
     if (Object.keys(this.tabIdToBorn).length == 0) {
       requestMap.remove(this.id());
@@ -1390,7 +1419,7 @@ chrome.webRequest.onResponseStarted.addListener(wrap(async (details) => {
   requestInfo.save();
   const firstMs = requestInfo.started ? details.timeStamp - requestInfo.started : null;
   for (const tabInfo of tabInfos) {
-    tabInfo.addDomain(parsed.domain, dflags, addr, aflags, firstMs);
+    tabInfo.addDomain(parsed.domain, dflags, addr, aflags, firstMs, details.statusCode);
   }
 }), FILTER_ALL_URLS);
 

@@ -446,6 +446,8 @@ function makeRow(isFirst, tuple) {
   const flags = tuple[3];
   const firstMs = tuple[4];
   const completedMs = tuple[5];
+  const requestCount = tuple[6] || 0;
+  const errorStatus = tuple[7];
 
   const tr = document.createElement("tr");
   if (isFirst) {
@@ -501,6 +503,23 @@ function makeRow(isFirst, tuple) {
     }, () => geoTd.classList.add("geoPending"));
   }
 
+  // Build the "Request Count" column.
+  const countTd = document.createElement("td");
+  countTd.className = `countTd${connectedClass}`;
+  if (requestCount > 0) {
+    countTd.textContent = String(requestCount);
+    countTd.title = `Requests: ${requestCount}`;
+  }
+
+  // Build the "Error Status" column.
+  const statusTd = document.createElement("td");
+  statusTd.className = `statusTd${connectedClass}`;
+  if (Number.isFinite(errorStatus) && errorStatus >= 400) {
+    statusTd.textContent = String(errorStatus);
+    statusTd.title = `Last error status: ${errorStatus}`;
+    statusTd.classList.add("errorStatus");
+  }
+
   // Build the "Timing" column.
   const timingTd = document.createElement("td");
   timingTd.className = `timingTd${connectedClass}`;
@@ -545,6 +564,8 @@ function makeRow(isFirst, tuple) {
   tr.appendChild(domainTd);
   tr.appendChild(addrTd);
   tr.appendChild(geoTd);
+  tr.appendChild(countTd);
+  tr.appendChild(statusTd);
   tr.appendChild(timingTd);
   tr.appendChild(cacheTd);
   return tr;
