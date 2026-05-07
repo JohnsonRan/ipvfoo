@@ -338,7 +338,7 @@ class TabInfo extends SaveableEntry {
     this.save();
   }
 
-  addDomain(domain, dflags, addr, aflags) {
+  addDomain(domain, dflags, addr, aflags, firstMs = null) {
     let d = this.domains[domain];
     if (!d) {
       // Limit the number of domains per page, to avoid wasting RAM.
@@ -348,10 +348,13 @@ class TabInfo extends SaveableEntry {
       }
       d = this.domains[domain] =
           new DomainInfo(this, domain, addr || "(lost)", dflags | aflags);
+      d.recordFirstTiming(firstMs);
       d.countUp();
     } else {
       const oldAddr = d.addr;
       const oldFlags = d.flags;
+      const oldFirstMs = d.firstMs;
+      d.recordFirstTiming(firstMs);
 
       // Domain flags just accumulate.
       d.flags |= dflags;
@@ -364,7 +367,7 @@ class TabInfo extends SaveableEntry {
       }
       d.countUp();
       // Don't update if nothing has changed.
-      if (d.addr == oldAddr && d.flags == oldFlags) {
+      if (d.addr == oldAddr && d.flags == oldFlags && d.firstMs == oldFirstMs) {
         return;
       }
     }
@@ -447,11 +450,11 @@ class TabInfo extends SaveableEntry {
     popups.pushOne(this.id(), this.getTuple(domain));
   }
 
-  // Build some [domain, addr, version, flags] tuples, for a popup.
+  // Build some [domain, addr, version, flags, firstMs, completedMs] tuples, for a popup.
   getTuples() {
     const mainDomain = this.mainDomain || "(no domain)";
     const domains = Object.keys(this.domains).sort();
-    const mainTuple = [mainDomain, "(no address)", "?", 0];
+    const mainTuple = [mainDomain, "(no address)", "?", 0, null, null];
     const tuples = [mainTuple];
     for (const domain of domains) {
       const d = this.domains[domain];
@@ -459,21 +462,23 @@ class TabInfo extends SaveableEntry {
         mainTuple[1] = d.addr;
         mainTuple[2] = d.addrVersion();
         mainTuple[3] = d.flags;
+        mainTuple[4] = d.firstMs;
+        mainTuple[5] = d.completedMs;
       } else {
-        tuples.push([domain, d.addr, d.addrVersion(), d.flags]);
+        tuples.push(this.getTuple(domain));
       }
     }
     return tuples;
   }
 
-  // Build [domain, addr, version, flags] tuple, for a popup.
+  // Build [domain, addr, version, flags, firstMs, completedMs] tuple, for a popup.
   getTuple(domain) {
     const d = this.domains[domain];
     if (!d) {
       // Perhaps this.domains was cleared during the request's lifetime.
       return null;
     }
-    return [domain, d.addr, d.addrVersion(), d.flags];
+    return [domain, d.addr, d.addrVersion(), d.flags, d.firstMs, d.completedMs];
   }
 }
 
@@ -485,6 +490,8 @@ class DomainInfo {
 
   count = 0;  // count of active requests
   inhibitZero = false;
+  firstMs = null;
+  completedMs = null;
 
   constructor(tabInfo, domain, addr, flags) {
     this.tabInfo = tabInfo;
@@ -495,12 +502,15 @@ class DomainInfo {
 
   // count and DFLAG_CONNECTED will be computed from requestMap.
   toJSON() {
-    return [this.addr, this.flags & ~DFLAG_CONNECTED];
+    return [this.addr, this.flags & ~DFLAG_CONNECTED, this.firstMs, this.completedMs];
   }
 
   static fromJSON(tabInfo, domain, json) {
-    const [addr, flags] = json;
-    return new DomainInfo(tabInfo, domain, addr, flags);
+    const [addr, flags, firstMs, completedMs] = json;
+    const d = new DomainInfo(tabInfo, domain, addr, flags);
+    d.firstMs = Number.isFinite(firstMs) ? firstMs : null;
+    d.completedMs = Number.isFinite(completedMs) ? completedMs : null;
+    return d;
   }
 
   addrVersion() {
@@ -523,6 +533,32 @@ class DomainInfo {
     }
   }
 
+  recordFirstTiming(ms) {
+    if (!Number.isFinite(ms)) {
+      return false;
+    }
+    ms = Math.max(0, Math.round(ms));
+    if (this.firstMs == null || ms < this.firstMs) {
+      this.firstMs = ms;
+      return true;
+    }
+    return false;
+  }
+
+  recordCompletedTiming(ms) {
+    if (!Number.isFinite(ms)) {
+      return false;
+    }
+    ms = Math.max(0, Math.round(ms));
+    if (this.completedMs == null || ms > this.completedMs) {
+      this.completedMs = ms;
+      this.tabInfo.pushOne(this.domain);
+      this.tabInfo.save();
+      return true;
+    }
+    return false;
+  }
+
   countDown() {
     if (!(this.count > 0)) throw "Count went negative!";
     --this.count;
@@ -543,6 +579,7 @@ class RequestInfo extends SaveableEntry {
   tabIdToBorn = newMap();
   domain = null;
   prefetch = false;
+  started = 0;
 
   afterLoad() {
     for (const [tabId, tabBorn] of Object.entries(this.tabIdToBorn)) {
@@ -554,7 +591,7 @@ class RequestInfo extends SaveableEntry {
       if (!this.domain) {
         continue;  // still waiting for onResponseStarted
       }
-      tabInfo.addDomain(this.domain, 0, null, 0);
+      tabInfo.addDomain(this.domain, 0, null, 0, null);
     }
     if (Object.keys(this.tabIdToBorn).length == 0) {
       requestMap.remove(this.id());
@@ -1197,6 +1234,7 @@ chrome.webRequest.onBeforeRequest.addListener(wrap(async (details) => {
   for (const tabInfo of tabInfos) {
     requestInfo.tabIdToBorn[tabInfo.id()] = tabInfo.born;
   }
+  requestInfo.started = details.timeStamp || Date.now();
   requestInfo.domain = null;
   requestInfo.prefetch = prefetch;
   requestInfo.save();
@@ -1296,8 +1334,9 @@ chrome.webRequest.onResponseStarted.addListener(wrap(async (details) => {
   if (requestInfo.domain) throw `Duplicate onResponseStarted: ${parsed.domain}`;
   requestInfo.domain = parsed.domain;
   requestInfo.save();
+  const firstMs = requestInfo.started ? details.timeStamp - requestInfo.started : null;
   for (const tabInfo of tabInfos) {
-    tabInfo.addDomain(parsed.domain, dflags, addr, aflags);
+    tabInfo.addDomain(parsed.domain, dflags, addr, aflags, firstMs);
   }
 }), FILTER_ALL_URLS);
 
@@ -1307,10 +1346,15 @@ const forgetRequest = wrap(async (details) => {
   if (!requestInfo?.domain) {
     return;
   }
+  const completedMs = requestInfo.started ? details.timeStamp - requestInfo.started : null;
   for (const [tabId, tabBorn] of Object.entries(requestInfo.tabIdToBorn)) {
     const tabInfo = tabMap[tabId];
     if (tabInfo?.born == tabBorn) {
-      tabInfo.domains[requestInfo.domain]?.countDown();
+      const domainInfo = tabInfo.domains[requestInfo.domain];
+      if (domainInfo) {
+        domainInfo.recordCompletedTiming(completedMs);
+        domainInfo.countDown();
+      }
     }
   }
 });

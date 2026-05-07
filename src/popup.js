@@ -182,9 +182,9 @@ window.onload = async function() {
   } else {
     console.log("No tabId, using test table")
     const TEST_TUPLES = [
-      ["ipv6.example.com", "2001:db8::f00", "6", DFLAG_SSL],
-      ["ipv4.example.com", "192.0.2.9", "4", DFLAG_NOSSL],
-      ["cached.example.com", "2001:db8::f00", "6", DFLAG_SSL | DFLAG_NOSSL | AFLAG_CACHE],
+      ["ipv6.example.com", "2001:db8::f00", "6", DFLAG_SSL, 82, 410],
+      ["ipv4.example.com", "192.0.2.9", "4", DFLAG_NOSSL, 126, 1390],
+      ["cached.example.com", "2001:db8::f00", "6", DFLAG_SSL | DFLAG_NOSSL | AFLAG_CACHE, 9, 9],
     ];
     pushAll(TEST_TUPLES, "646", REGULAR_COLOR, 0);
   }
@@ -426,11 +426,26 @@ function makeSslImg(flags) {
   }
 }
 
+function formatDuration(ms) {
+  if (!Number.isFinite(ms)) {
+    return "";
+  }
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`;
+  }
+  if (ms < 10000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${Math.round(ms / 1000)}s`;
+}
+
 function makeRow(isFirst, tuple) {
   const domain = tuple[0];
   const addr = tuple[1];
   const version = tuple[2];
   const flags = tuple[3];
+  const firstMs = tuple[4];
+  const completedMs = tuple[5];
 
   const tr = document.createElement("tr");
   if (isFirst) {
@@ -486,6 +501,16 @@ function makeRow(isFirst, tuple) {
     }, () => geoTd.classList.add("geoPending"));
   }
 
+  // Build the "Timing" column.
+  const timingTd = document.createElement("td");
+  timingTd.className = `timingTd${connectedClass}`;
+  const firstText = formatDuration(firstMs);
+  const completedText = formatDuration(completedMs);
+  if (firstText || completedText) {
+    timingTd.textContent = `${firstText || "-"} / ${completedText || "..."}`;
+    timingTd.title = `First response: ${firstText || "unknown"}\nComplete: ${completedText || "pending"}`;
+  }
+
   // Build the (possibly invisible) "WebSocket/Cached" column.
   // We don't need to worry about drawing both, because a cached WebSocket
   // would be nonsensical.
@@ -518,6 +543,7 @@ function makeRow(isFirst, tuple) {
   tr.appendChild(domainTd);
   tr.appendChild(addrTd);
   tr.appendChild(geoTd);
+  tr.appendChild(timingTd);
   tr.appendChild(cacheTd);
   return tr;
 }
