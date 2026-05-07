@@ -708,13 +708,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleFetchGeoInfo(message.ip).then(sendResponse, () => sendResponse(GEO_EMPTY_INFO));
     return true;
   }
+  if (message.cmd === "clearGeoCache") {
+    clearGeoCache().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+    return true;
+  }
 });
 
 // Geo info cache in storage.local (7-day TTL).
 const GEO_EMPTY_INFO = { country_code: "", region_code: "", organization: "" };
-const GEO_CACHE_PREFIX = "geo_";
-const GEO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
-const GEO_NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
 const GEO_CACHE_MAX_ENTRIES = 2048;
 const GEO_CACHE_CLEANUP_INTERVAL = 60 * 60 * 1000;
 const GEO_FETCH_TIMEOUT = 8000;
@@ -725,6 +726,21 @@ const geoFetchInFlight = new Map();
 let geoCacheCleanupPromise = null;
 let geoCacheLastCleanup = 0;
 
+async function getGeoCacheIndex() {
+  const items = await chrome.storage.local.get(GEO_CACHE_INDEX_KEY);
+  const index = items[GEO_CACHE_INDEX_KEY];
+  return Array.isArray(index) ? index.filter(key => typeof key == "string") : [];
+}
+
+async function setGeoCacheEntry(cacheKey, data) {
+  await chrome.storage.local.set({ [cacheKey]: { data, timestamp: Date.now() } });
+  const index = await getGeoCacheIndex();
+  if (!index.includes(cacheKey)) {
+    index.push(cacheKey);
+    await chrome.storage.local.set({ [GEO_CACHE_INDEX_KEY]: index });
+  }
+}
+
 function maybeCleanupGeoCache() {
   const now = Date.now();
   if (geoCacheCleanupPromise || now - geoCacheLastCleanup < GEO_CACHE_CLEANUP_INTERVAL) {
@@ -732,19 +748,22 @@ function maybeCleanupGeoCache() {
   }
   geoCacheCleanupPromise = (async () => {
     try {
-      const allItems = await chrome.storage.local.get(null);
+      const index = await getGeoCacheIndex();
+      const items = await chrome.storage.local.get(index);
       const valid = [];
       const toRemove = [];
-      for (const [key, value] of Object.entries(allItems)) {
+      for (const key of index) {
         if (!key.startsWith(GEO_CACHE_PREFIX)) {
           continue;
         }
+        const value = items[key];
         const timestamp = value?.timestamp;
         if (!(Number.isFinite(timestamp) && timestamp > 0)) {
           toRemove.push(key);
           continue;
         }
-        if (now - timestamp >= GEO_CACHE_TTL) {
+        const ttl = hasGeoInfo(value?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
+        if (now - timestamp >= ttl) {
           toRemove.push(key);
           continue;
         }
@@ -758,6 +777,9 @@ function maybeCleanupGeoCache() {
       if (toRemove.length) {
         await chrome.storage.local.remove(toRemove);
       }
+      await chrome.storage.local.set({
+        [GEO_CACHE_INDEX_KEY]: valid.slice(0, GEO_CACHE_MAX_ENTRIES).map(([key]) => key),
+      });
     } catch {
       // ignore
     } finally {
@@ -768,6 +790,10 @@ function maybeCleanupGeoCache() {
 }
 
 async function handleFetchGeoInfo(ip) {
+  await optionsReady;
+  if (!options[GEO_INFO_ENABLED]) {
+    return GEO_EMPTY_INFO;
+  }
   const geoCacheKey = geoCacheKeyForIP(ip);
   if (!geoCacheKey) {
     return GEO_EMPTY_INFO;
@@ -797,14 +823,14 @@ async function handleFetchGeoInfo(ip) {
     const data = await fetchGeoInfoUncached(ip);
     if (!data) {
       try {
-        await chrome.storage.local.set({ [cacheKey]: { data: GEO_EMPTY_INFO, timestamp: Date.now() } });
+        await setGeoCacheEntry(cacheKey, GEO_EMPTY_INFO);
       } catch {
         // ignore
       }
       return GEO_EMPTY_INFO;
     }
     try {
-      await chrome.storage.local.set({ [cacheKey]: { data, timestamp: Date.now() } });
+      await setGeoCacheEntry(cacheKey, data);
     } catch {
       // ignore
     }
@@ -815,6 +841,16 @@ async function handleFetchGeoInfo(ip) {
     return await fetchPromise;
   } finally {
     geoFetchInFlight.delete(cacheKey);
+  }
+}
+
+async function clearGeoCache() {
+  const index = await getGeoCacheIndex();
+  const allItems = await chrome.storage.local.get(null);
+  const legacyKeys = Object.keys(allItems).filter(key => key.startsWith(GEO_CACHE_PREFIX));
+  const keys = [...new Set([...index, ...legacyKeys, GEO_CACHE_INDEX_KEY])];
+  if (keys.length) {
+    await chrome.storage.local.remove(keys);
   }
 }
 

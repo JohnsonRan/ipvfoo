@@ -75,6 +75,12 @@ const CUSTOM_PROVIDER = "customProvider:";
 const CUSTOM_PROVIDER_DOMAIN = CUSTOM_PROVIDER + "domain";
 const CUSTOM_PROVIDER_IP = CUSTOM_PROVIDER + "ip";
 
+const GEO_INFO_ENABLED = "geoInfoEnabled";
+const GEO_CACHE_PREFIX = "geo_";
+const GEO_CACHE_INDEX_KEY = "geo:index";
+const GEO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+const GEO_NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
+
 // "$" is a placeholder for the user's selected domain or IP address.
 const LOOKUP_PROVIDERS = {
   "bgp.he.net": {
@@ -163,6 +169,7 @@ let _watchOptionsFunc = null;
 const DEFAULT_LOCAL_OPTIONS = {
   [REGULAR_COLOR]: "",  // default replaced on first boot.
   [INCOGNITO_COLOR]: "lightfg",
+  [GEO_INFO_ENABLED]: true,
 };
 const DEFAULT_SYNC_OPTIONS = {
   [LOOKUP_PROVIDER]: "bgp.he.net",

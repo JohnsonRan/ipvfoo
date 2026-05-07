@@ -20,80 +20,156 @@ limitations under the License.
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style type="text/css">
   body {
-    font-family: sans-serif;
-    font-size: 10pt;
-    background-color: #fff;
-    color: #444;
-    margin: 20px;
+    margin: 0;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    background-color: #f6f8fa;
+    color: #1f2328;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
   }
   h1 {
-    font-size: 14pt;
-    font-weight: normal;
+    margin: 0 0 12px 0;
+    font-size: 17px;
+    font-weight: 650;
+  }
+  p {
+    margin: 0 0 12px 0;
+    color: #57606a;
+    line-height: 1.45;
+  }
+  section {
+    margin-bottom: 18px;
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(140, 149, 159, 0.14);
   }
   table, td, tr, th {
-    border-width: 1px;
-    border-collapse: collapse;
-    border-color: #888;
+    border-width: 0;
+    border-collapse: separate;
+    border-color: #d0d7de;
     border-style: solid;
-    padding: 3pt;
+    padding: 6px 0;
     white-space: nowrap;
     vertical-align: middle;
   }
   #nat64 table, #nat64 td, #nat64 tr {
-    font-family: monospace;
-    color: #800000;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    color: #bc4c00;
   }
   ul {
-    list-style-position: inside;
-    padding: 0;
-    margin: 0;
+    padding-left: 18px;
+    margin: 0 0 12px 0;
   }
   a, a:visited {
-    color: blue;
+    color: #0969da;
   }
 
   #lookup-provider table {
     width: 100%;
   }
   #lookup-provider td {
-    border-left: none;
-    padding-left: 0;
+    padding-left: 8px;
   }
   #lookup-provider th {
     width: 1%;
     white-space: nowrap;
     text-align: left;
-    border-right: none;
+    color: #57606a;
+    font-weight: 600;
   }
   #providers {
-    margin-bottom: 6pt;
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  #providers label,
+  .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .url-field {
     width: 100%;
-    padding: 3pt;
+    padding: 7px 9px;
     box-sizing: border-box;
-    border: 1px solid #888;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
     color: inherit;
-    background-color: inherit;
+    background-color: #fff;
+    font: inherit;
   }
   .url-field.invalid {
-    background-color: #fcc;
+    border-color: #cf222e;
+    background-color: #ffebe9;
+  }
+  button {
+    padding: 7px 11px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #fff;
+    color: #1f2328;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #f6f8fa;
+  }
+  .button-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .muted {
+    color: #6e7781;
+    font-size: 12px;
+  }
+  #clearGeoCacheStatus {
+    margin-left: 8px;
   }
 
   /* dark mode */
   @media (prefers-color-scheme: dark) {
     body {
-      background-color: #222;
-      color: #eee;
+      background-color: #0d1117;
+      color: #e6edf3;
+    }
+    section {
+      background: #161b22;
+      border-color: #30363d;
+      box-shadow: 0 8px 24px rgba(1, 4, 9, 0.35);
+    }
+    p,
+    #lookup-provider th,
+    .muted {
+      color: #8b949e;
     }
     a, a:visited {
-      color: lightblue;
+      color: #79c0ff;
     }
     #nat64 table, #nat64 td, #nat64 tr {
-      color: #ff8080;
+      color: #ffa657;
+    }
+    .url-field {
+      background: #0d1117;
+      border-color: #30363d;
     }
     .url-field.invalid {
-      background-color: #700;
+      border-color: #f85149;
+      background-color: #490202;
+    }
+    button {
+      background: #161b22;
+      border-color: #30363d;
+      color: #e6edf3;
+    }
+    button:hover {
+      background: #0d1117;
     }
   }
   </style>
@@ -103,38 +179,51 @@ limitations under the License.
 </head>
 
 <body>
-  <div id="lookup-provider">
-    <h1>Lookup providers</h1>
-    Use this service from the popup context menu:<br>
-    <div id="providers"></div>
-    <table>
-      <tr>
-        <th>Domains:</th>
-        <td>
-          <input type="text" id="domainUrl" class="url-field" value="">
-        </td>
-      </tr>
-      <tr>
-        <th>IPs:</th>
-        <td>
-          <input type="text" id="ipUrl" class="url-field" value="">
-        </td>
-      </tr>
-    </table>
-    <br>
-  </div>
+  <main>
+    <section id="geo-info">
+      <h1>Geo info</h1>
+      <label class="setting-row">
+        <input type="checkbox" id="geoInfoEnabled">
+        <span>Show Geo info in the popup</span>
+      </label>
+      <p class="muted">When enabled, public IP addresses are looked up through HTTPS Geo providers and cached by CIDR.</p>
+      <button id="clearGeoCacheBtn">Clear Geo Cache</button>
+      <span id="clearGeoCacheStatus" class="muted"></span>
+    </section>
 
-  <h1>NAT64 prefixes</h1>
-  Prefixes are discovered automatically when you visit these IPv4-only pages using a NAT64 connection:
-  <ul id="ipv4pages"></ul>
-  <br>
-  <table id="nat64">
-    <tr><td>null::/96</td></tr>
-  </table>
+    <section id="lookup-provider">
+      <h1>Lookup providers</h1>
+      <p>Use this service from the popup context menu.</p>
+      <div id="providers"></div>
+      <table>
+        <tr>
+          <th>Domains</th>
+          <td>
+            <input type="text" id="domainUrl" class="url-field" value="">
+          </td>
+        </tr>
+        <tr>
+          <th>IPs</th>
+          <td>
+            <input type="text" id="ipUrl" class="url-field" value="">
+          </td>
+        </tr>
+      </table>
+    </section>
 
-  <div style="display:inline-block; padding-top:1.5em; width:100%">
-    <button id="revert_btn" style="float:left">Revert to Defaults</button>
-    <button id="dismiss_btn" style="float:right">Dismiss</button>
-  </div>
+    <section>
+      <h1>NAT64 prefixes</h1>
+      <p>Prefixes are discovered automatically when you visit these IPv4-only pages using a NAT64 connection.</p>
+      <ul id="ipv4pages"></ul>
+      <table id="nat64">
+        <tr><td>null::/96</td></tr>
+      </table>
+    </section>
+
+    <div class="button-row">
+      <button id="revert_btn">Revert to Defaults</button>
+      <button id="dismiss_btn">Dismiss</button>
+    </div>
+  </main>
 </body>
 </html>

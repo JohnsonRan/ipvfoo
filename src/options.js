@@ -50,6 +50,9 @@ window.onload = async () => {
 
   const domainUrl = document.getElementById("domainUrl");
   const ipUrl = document.getElementById("ipUrl");
+  const geoInfoEnabled = document.getElementById("geoInfoEnabled");
+  const clearGeoCacheBtn = document.getElementById("clearGeoCacheBtn");
+  const clearGeoCacheStatus = document.getElementById("clearGeoCacheStatus");
 
   function updateValidationAndWrite() {
     for (const field of [domainUrl, ipUrl]) {
@@ -90,11 +93,28 @@ window.onload = async () => {
   }
   domainUrl.addEventListener("input", handleFieldInput);
   ipUrl.addEventListener("input", handleFieldInput);
+  geoInfoEnabled.addEventListener("change", () => {
+    chrome.storage.local.set({ [GEO_INFO_ENABLED]: geoInfoEnabled.checked });
+  });
+  clearGeoCacheBtn.addEventListener("click", async () => {
+    clearGeoCacheBtn.disabled = true;
+    clearGeoCacheStatus.textContent = "Clearing...";
+    try {
+      const response = await chrome.runtime.sendMessage({ cmd: "clearGeoCache" });
+      clearGeoCacheStatus.textContent = response?.ok ? "Cleared" : "Failed";
+    } catch {
+      clearGeoCacheStatus.textContent = "Failed";
+    } finally {
+      clearGeoCacheBtn.disabled = false;
+      setTimeout(() => clearGeoCacheStatus.textContent = "", 1800);
+    }
+  });
 
   let customUrlForDomains = undefined;
   let customUrlForIPs = undefined;
 
   function applyOptionsToPage(o) {
+    geoInfoEnabled.checked = !!o[GEO_INFO_ENABLED];
     customUrlForDomains = o[CUSTOM_PROVIDER_DOMAIN];
     customUrlForIPs = o[CUSTOM_PROVIDER_IP];
     const provider = o[LOOKUP_PROVIDER];
@@ -133,7 +153,8 @@ window.onload = async () => {
   document.getElementById("revert_btn").onclick = function() {
     revertNAT64();
     chrome.runtime.sendMessage({setStorageSyncDebounce: DEFAULT_SYNC_OPTIONS});
-    applyOptionsToPage(DEFAULT_SYNC_OPTIONS);
+    chrome.storage.local.set({ [GEO_INFO_ENABLED]: DEFAULT_LOCAL_OPTIONS[GEO_INFO_ENABLED] });
+    applyOptionsToPage({ ...DEFAULT_LOCAL_OPTIONS, ...DEFAULT_SYNC_OPTIONS });
   };
 
   document.getElementById("dismiss_btn").onclick = function() {

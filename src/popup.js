@@ -21,9 +21,6 @@ limitations under the License.
 // Geo info fetch queue: up to 5 concurrent requests per 3-second batch.
 const geoInfoQueue = (() => {
   const EMPTY = { country_code: "", region_code: "", organization: "" };
-  const CACHE_PREFIX = "geo_";
-  const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
-  const NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
   const queue = [];
   const pendingByKey = new Map();  // CIDR cache key -> {callback, onPending}[]
   const cacheByKey = new Map();    // CIDR cache key -> geo info
@@ -47,10 +44,10 @@ const geoInfoQueue = (() => {
 
   async function readCachedGeo(key) {
     try {
-      const storageKey = CACHE_PREFIX + key;
+      const storageKey = GEO_CACHE_PREFIX + key;
       const cached = await chrome.storage.local.get(storageKey);
       const entry = cached[storageKey];
-      const ttl = hasGeoInfo(entry?.data) ? CACHE_TTL : NEGATIVE_CACHE_TTL;
+      const ttl = hasGeoInfo(entry?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
       if (entry?.data && entry.timestamp && Date.now() - entry.timestamp < ttl) {
         return entry.data || EMPTY;
       }
@@ -148,6 +145,9 @@ const geoInfoQueue = (() => {
 })();
 
 function isGeoLookupCandidate(addr) {
+  if (!options[GEO_INFO_ENABLED]) {
+    return false;
+  }
   if (!addr || addr == "(no address)" || addr == "(lost)") {
     return false;
   }
@@ -508,7 +508,9 @@ function makeRow(isFirst, tuple) {
   const completedText = formatDuration(completedMs);
   if (firstText || completedText) {
     timingTd.textContent = `${firstText || "-"} / ${completedText || "..."}`;
-    timingTd.title = `First response: ${firstText || "unknown"}\nComplete: ${completedText || "pending"}`;
+    timingTd.title =
+        `Fastest first response: ${firstText || "unknown"}\n` +
+        `Longest completed request: ${completedText || "pending"}`;
   }
 
   // Build the (possibly invisible) "WebSocket/Cached" column.
