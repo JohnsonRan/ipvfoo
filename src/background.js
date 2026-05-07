@@ -660,14 +660,214 @@ function lookupOriginMap(origin) {
   }
 })();
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.hasOwnProperty("darkModeOffscreen")) {
     setColorIsDarkMode(REGULAR_COLOR, message.darkModeOffscreen);
   }
   if (message.hasOwnProperty("setStorageSyncDebounce")) {
     storageSyncDebouncer.set(message.setStorageSyncDebounce);
   }
+  if (message.cmd === "fetchGeoInfo") {
+    handleFetchGeoInfo(message.ip).then(sendResponse, () => sendResponse(GEO_EMPTY_INFO));
+    return true;
+  }
 });
+
+// Geo info cache in storage.local (7-day TTL).
+const GEO_EMPTY_INFO = { country_code: "", region_code: "", organization: "" };
+const GEO_CACHE_PREFIX = "geo_";
+const GEO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+const GEO_NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
+const GEO_CACHE_MAX_ENTRIES = 2048;
+const GEO_CACHE_CLEANUP_INTERVAL = 60 * 60 * 1000;
+const GEO_FETCH_TIMEOUT = 8000;
+const GEO_FALLBACK_DELAY = 700;
+const GEO_API_IPSB = "https://api.ip.sb/geoip/";
+const GEO_API_IPWHOIS = "https://ipwho.is/";
+const geoFetchInFlight = new Map();
+let geoCacheCleanupPromise = null;
+let geoCacheLastCleanup = 0;
+
+function maybeCleanupGeoCache() {
+  const now = Date.now();
+  if (geoCacheCleanupPromise || now - geoCacheLastCleanup < GEO_CACHE_CLEANUP_INTERVAL) {
+    return;
+  }
+  geoCacheCleanupPromise = (async () => {
+    try {
+      const allItems = await chrome.storage.local.get(null);
+      const valid = [];
+      const toRemove = [];
+      for (const [key, value] of Object.entries(allItems)) {
+        if (!key.startsWith(GEO_CACHE_PREFIX)) {
+          continue;
+        }
+        const timestamp = value?.timestamp;
+        if (!(Number.isFinite(timestamp) && timestamp > 0)) {
+          toRemove.push(key);
+          continue;
+        }
+        if (now - timestamp >= GEO_CACHE_TTL) {
+          toRemove.push(key);
+          continue;
+        }
+        valid.push([key, timestamp]);
+      }
+      // Keep the newest entries when over capacity.
+      valid.sort((a, b) => b[1] - a[1]);
+      for (let i = GEO_CACHE_MAX_ENTRIES; i < valid.length; i++) {
+        toRemove.push(valid[i][0]);
+      }
+      if (toRemove.length) {
+        await chrome.storage.local.remove(toRemove);
+      }
+    } catch {
+      // ignore
+    } finally {
+      geoCacheLastCleanup = Date.now();
+      geoCacheCleanupPromise = null;
+    }
+  })();
+}
+
+async function handleFetchGeoInfo(ip) {
+  const geoCacheKey = geoCacheKeyForIP(ip);
+  if (!geoCacheKey) {
+    return GEO_EMPTY_INFO;
+  }
+  maybeCleanupGeoCache();
+  const cacheKey = GEO_CACHE_PREFIX + geoCacheKey;
+
+  // Fast path from cache.
+  try {
+    const cached = await chrome.storage.local.get(cacheKey);
+    const entry = cached[cacheKey];
+    const ttl = hasGeoInfo(entry?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
+    if (entry?.data && entry.timestamp && Date.now() - entry.timestamp < ttl) {
+      return normalizeGeoInfo(entry.data);
+    }
+    if (entry) {
+      chrome.storage.local.remove(cacheKey).catch(() => {});
+    }
+  } catch {}
+
+  const inFlight = geoFetchInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const fetchPromise = (async () => {
+    const data = await fetchGeoInfoUncached(ip);
+    if (!data) {
+      try {
+        await chrome.storage.local.set({ [cacheKey]: { data: GEO_EMPTY_INFO, timestamp: Date.now() } });
+      } catch {
+        // ignore
+      }
+      return GEO_EMPTY_INFO;
+    }
+    try {
+      await chrome.storage.local.set({ [cacheKey]: { data, timestamp: Date.now() } });
+    } catch {
+      // ignore
+    }
+    return data;
+  })();
+  geoFetchInFlight.set(cacheKey, fetchPromise);
+  try {
+    return await fetchPromise;
+  } finally {
+    geoFetchInFlight.delete(cacheKey);
+  }
+}
+
+function normalizeGeoInfo(json) {
+  return {
+    country_code: json?.country_code || "",
+    region_code: json?.region_code || "",
+    organization: json?.organization || "",
+  };
+}
+
+function hasGeoInfo(info) {
+  return !!(info?.country_code || info?.region_code || info?.organization);
+}
+
+function startGeoProvider(fetcher, ip) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEO_FETCH_TIMEOUT);
+  const promise = (async () => {
+    try {
+      const info = await fetcher(ip, controller.signal);
+      if (hasGeoInfo(info)) {
+        return info;
+      }
+      throw new Error("empty geo info");
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+  return {
+    promise,
+    abort() {
+      controller.abort();
+    },
+  };
+}
+
+async function fetchGeoFromIpSb(ip, signal) {
+  const r = await fetch(`${GEO_API_IPSB}${encodeURIComponent(ip)}`, { signal });
+  if (!r.ok) {
+    throw new Error("ip.sb request failed");
+  }
+  return normalizeGeoInfo(await r.json());
+}
+
+async function fetchGeoFromIpWhoIs(ip, signal) {
+  const r = await fetch(`${GEO_API_IPWHOIS}${encodeURIComponent(ip)}`, { signal });
+  if (!r.ok) {
+    throw new Error("ipwho.is request failed");
+  }
+  const json = await r.json();
+  if (json?.success === false) {
+    throw new Error("ipwho.is returned error");
+  }
+  return normalizeGeoInfo({
+    country_code: json?.country_code || json?.country || "",
+    region_code: json?.region_code || json?.region || "",
+    organization: json?.connection?.org || json?.organization || json?.isp || "",
+  });
+}
+
+async function fetchGeoInfoUncached(ip) {
+  const primary = startGeoProvider(fetchGeoFromIpSb, ip);
+  let secondary = null;
+  const startSecondary = () => {
+    if (!secondary) {
+      secondary = startGeoProvider(fetchGeoFromIpWhoIs, ip);
+    }
+    return secondary;
+  };
+  try {
+    // Try the primary provider first for a short window.
+    const fastResult = await Promise.race([
+      primary.promise.then(info => ({ ok: true, info })).catch(() => ({ ok: false })),
+      new Promise(resolve => setTimeout(() => resolve({ timeout: true }), GEO_FALLBACK_DELAY)),
+    ]);
+    if (fastResult.ok) {
+      return fastResult.info;
+    }
+
+    // If primary is slow/failed, hedge with the fallback provider.
+    const fallback = startSecondary();
+    return await Promise.any([primary.promise, fallback.promise]);
+  } catch {
+    return null;
+  } finally {
+    primary.abort();
+    secondary?.abort();
+  }
+}
 
 // This class prevents writing to storage.sync more than once per second,
 // so the user can type in a text field without spamming the network.

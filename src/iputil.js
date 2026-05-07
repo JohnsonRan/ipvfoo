@@ -38,6 +38,76 @@ function parseIP(s) {
   throw "no colons or dots";
 }
 
+function isPublicIPForGeo(s) {
+  const packed = packedPublicIPForGeo(s);
+  return !!packed;
+}
+
+function geoCacheKeyForIP(s) {
+  const packed = packedPublicIPForGeo(s);
+  if (!packed) {
+    return "";
+  }
+  if (packed.length == 8) {
+    return `4:${packed.slice(0, 6)}`;
+  }
+  return `6:${packed.slice(0, 12)}`;
+}
+
+function packedPublicIPForGeo(s) {
+  let packed;
+  try {
+    packed = parseIP(s);
+  } catch {
+    return "";
+  }
+  if (packed.length == 32 && packed.startsWith("00000000000000000000ffff")) {
+    packed = packed.slice(24);
+  }
+  if (packed.length == 8 && isPublicIPv4Packed(packed)) {
+    return packed;
+  }
+  if (packed.length == 32 && isPublicIPv6Packed(packed)) {
+    return packed;
+  }
+  return "";
+}
+
+function isPublicIPv4Packed(packed) {
+  const a = parseInt(packed.slice(0, 2), 16);
+  const b = parseInt(packed.slice(2, 4), 16);
+  const c = parseInt(packed.slice(4, 6), 16);
+
+  return !(
+    a == 0 ||
+    a == 10 ||
+    a == 127 ||
+    (a == 100 && b >= 64 && b <= 127) ||
+    (a == 169 && b == 254) ||
+    (a == 172 && b >= 16 && b <= 31) ||
+    (a == 192 && b == 0) ||
+    (a == 192 && b == 168) ||
+    (a == 198 && (b == 18 || b == 19)) ||
+    (a == 198 && b == 51 && c == 100) ||
+    (a == 203 && b == 0 && c == 113) ||
+    a >= 224
+  );
+}
+
+function isPublicIPv6Packed(packed) {
+  return !(
+    packed == "00000000000000000000000000000000" ||
+    packed == "00000000000000000000000000000001" ||
+    packed.startsWith("0064ff9b") ||
+    packed.startsWith("0100000000000000") ||
+    packed.startsWith("20010db8") ||
+    packed.startsWith("fc") ||
+    packed.startsWith("fd") ||
+    /^fe[89ab]/.test(packed.slice(0, 3)) ||
+    packed.startsWith("ff")
+  );
+}
+
 // The input is a /96 or /128 worth of hex digits.
 function formatIPv6(packed, with_dots = false) {
   if (!(packed.length == 96/4 || packed.length == 128/4)) {

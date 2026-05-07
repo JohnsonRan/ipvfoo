@@ -18,6 +18,142 @@ limitations under the License.
 
 // Requires <script src="common.js">
 
+// Geo info fetch queue: up to 5 concurrent requests per 3-second batch.
+const geoInfoQueue = (() => {
+  const EMPTY = { country_code: "", region_code: "", organization: "" };
+  const CACHE_PREFIX = "geo_";
+  const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+  const NEGATIVE_CACHE_TTL = 10 * 60 * 1000;
+  const queue = [];
+  const pendingByKey = new Map();  // CIDR cache key -> {callback, onPending}[]
+  const cacheByKey = new Map();    // CIDR cache key -> geo info
+  let running = 0;
+  let lastBatchTime = 0;
+  let batchTimer = null;
+  const MAX_CONCURRENT = 5;
+  const INTERVAL_MS = 3000;
+
+  async function fetchGeo(ip) {
+    try {
+      return await chrome.runtime.sendMessage({ cmd: "fetchGeoInfo", ip }) || EMPTY;
+    } catch {
+      return EMPTY;
+    }
+  }
+
+  function hasGeoInfo(info) {
+    return !!(info?.country_code || info?.region_code || info?.organization);
+  }
+
+  async function readCachedGeo(key) {
+    try {
+      const storageKey = CACHE_PREFIX + key;
+      const cached = await chrome.storage.local.get(storageKey);
+      const entry = cached[storageKey];
+      const ttl = hasGeoInfo(entry?.data) ? CACHE_TTL : NEGATIVE_CACHE_TTL;
+      if (entry?.data && entry.timestamp && Date.now() - entry.timestamp < ttl) {
+        return entry.data || EMPTY;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  function deliver(key, info) {
+    const callbacks = pendingByKey.get(key) || [];
+    pendingByKey.delete(key);
+    cacheByKey.set(key, info || EMPTY);
+    for (const { callback } of callbacks) {
+      try {
+        callback(info);
+      } catch (err) {
+        console.error("Geo callback failed", err);
+      }
+    }
+  }
+
+  async function runOne(entry) {
+    let info = EMPTY;
+    try {
+      info = await fetchGeo(entry.ip);
+    } catch {
+      info = EMPTY;
+    }
+    deliver(entry.key, info || EMPTY);
+  }
+
+  function process() {
+    if (!queue.length || running > 0) {
+      return;
+    }
+
+    const elapsed = Date.now() - lastBatchTime;
+    if (lastBatchTime && elapsed < INTERVAL_MS) {
+      if (!batchTimer) {
+        batchTimer = setTimeout(() => {
+          batchTimer = null;
+          process();
+        }, INTERVAL_MS - elapsed);
+      }
+      return;
+    }
+
+    lastBatchTime = Date.now();
+    const batch = queue.splice(0, MAX_CONCURRENT);
+    for (const entry of batch) {
+      running++;
+      runOne(entry).finally(() => {
+        running--;
+        if (running == 0) {
+          process();
+        }
+      });
+    }
+  }
+
+  function add(ip, callback, onPending) {
+    const key = geoCacheKeyForIP(ip);
+    if (!key) {
+      callback(EMPTY);
+      return;
+    }
+    if (cacheByKey.has(key)) {
+      callback(cacheByKey.get(key));
+      return;
+    }
+    const pending = pendingByKey.get(key);
+    if (pending) {
+      pending.push({ callback, onPending });
+      return;
+    }
+    pendingByKey.set(key, [{ callback, onPending }]);
+    readCachedGeo(key).then((info) => {
+      if (info) {
+        deliver(key, info);
+        return;
+      }
+      const pending = pendingByKey.get(key);
+      if (pending) {
+        for (const item of pending) {
+          item.onPending?.();
+        }
+        queue.push({ key, ip });
+        process();
+      }
+    });
+  }
+
+  return { add };
+})();
+
+function isGeoLookupCandidate(addr) {
+  if (!addr || addr == "(no address)" || addr == "(lost)") {
+    return false;
+  }
+  return isPublicIPForGeo(addr);
+}
+
 const ALL_URLS = "<all_urls>";
 
 // Snip domains longer than this, to avoid horizontal scrolling.
@@ -335,6 +471,21 @@ function makeRow(isFirst, tuple) {
   addrTd.onclick = handleClick;
   addrTd.oncontextmenu = handleContextMenu;
 
+  // Build the "Geo Info" column.
+  const geoTd = document.createElement("td");
+  geoTd.className = `geoTd${connectedClass}`;
+  geoTd.textContent = "";
+  geoTd.title = "";
+
+  if (isGeoLookupCandidate(addr)) {
+    geoInfoQueue.add(addr, ({ country_code, region_code, organization }) => {
+      const summary = [country_code, region_code, organization].filter(Boolean).join(" | ");
+      geoTd.classList.remove("geoPending");
+      geoTd.textContent = summary;
+      geoTd.title = summary;
+    }, () => geoTd.classList.add("geoPending"));
+  }
+
   // Build the (possibly invisible) "WebSocket/Cached" column.
   // We don't need to worry about drawing both, because a cached WebSocket
   // would be nonsensical.
@@ -366,6 +517,7 @@ function makeRow(isFirst, tuple) {
   tr._domain = domain;
   tr.appendChild(domainTd);
   tr.appendChild(addrTd);
+  tr.appendChild(geoTd);
   tr.appendChild(cacheTd);
   return tr;
 }

@@ -21,68 +21,108 @@ limitations under the License.
 <style type="text/css">
 body {
   margin: 0;
-  font-family: serif;
-  font-size: medium;
-  background-color: #fff;
-  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  background-color: #f6f8fa;
+  color: #1f2328;
 }
 /* We want copy-paste to keep the domain in the first column,
    so this draws a vertical line to fake the "zeroth" column. */
 table {
-  background-image: url("1x1_808080.png");
-  background-position: top 0px left 23px;
-  background-repeat: repeat-y;
   --cache-min-width: 0px;
+  background-image: linear-gradient(to right, transparent 0 27px, #d0d7de 27px 28px, transparent 28px);
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  border-spacing: 0;
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.18);
+  overflow: hidden;
 }
-table, td, tr {
-  border-width: 1px;
-  border-collapse: collapse;
-  border-color: #808080;
+td, tr {
+  border-width: 0;
+  border-collapse: separate;
+  border-color: #d0d7de;
   border-style: solid;
-  padding: 0pt 3pt 0pt 3pt;
+  padding: 4px 8px;
   white-space: nowrap;
   user-select: none;
 }
 tr {
-  height: 21px;
+  height: 28px;
+}
+tr + tr td {
+  border-top-width: 1px;
+}
+tr:hover {
+  background-color: #eef6ff;
 }
 img {
   user-select: none;
+  vertical-align: -3px;
+}
+::selection {
+  background-color: #b6e3ff;
 }
 .mainRow {
   font-weight: bold;
+  background-color: #fff;
 }
 .sslImg {
   padding-right: 6pt;
 }
 .domainTd {
   user-select: text;
+  cursor: text;
 }
 .addrTd {
-  font-family: monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   border-right-width: 0;
-  color: #000080;
+  color: #0969da;
   padding-right: 0;
   user-select: text;
+  cursor: text;
 }
 .cacheTd {
   border-left-width: 0;
   text-align: right;
   min-width: var(--cache-min-width);
 }
+.cacheTd img {
+  opacity: 0.72;
+}
+.geoTd {
+  font-size: 12px;
+  color: #57606a;
+  padding-left: 6pt;
+  padding-right: 6pt;
+  border-left-width: 0;
+  border-right-width: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.geoPending::after {
+  content: "";
+  display: inline-block;
+  width: 34px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d0d7de, #f6f8fa, #d0d7de);
+  background-size: 200% 100%;
+  animation: geoPulse 1.2s ease-in-out infinite;
+}
 .ip4 {
-  color: #800000;
+  color: #bc4c00;
 }
 .ip6 {
-  color: #008000;
+  color: #1a7f37;
 }
 .highlight {
-  background-color: #ffff90;
+  background-color: #fff8c5;
 }
 .border {
   display: inline-block;
   float: left;
-  padding: 6px;
+  padding: 10px;
 }
 
 .snippedTextInvisible {
@@ -107,13 +147,19 @@ img {
 #beg {
   display: none;
   margin-bottom: 10px;
-  padding: 10px;
-  width: 100%
+  padding: 8px 10px;
+  width: 100%;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  color: #0969da;
+  font: inherit;
 }
 #spill_count_container {
   text-align: center;
-  font-weight: bold;
-  color: #808080;
+  font-weight: 600;
+  color: #6e7781;
+  margin-top: 8px;
 }
 #mobile_footer {
   display: none; /* or flex */
@@ -121,21 +167,21 @@ img {
   align-items: center;
 }
 #options_link {
-  padding-top: 20px;
-  padding-bottom: 20px;
+  padding-top: 16px;
+  padding-bottom: 14px;
   flex: 1;
-  font-size: large;
+  font-size: 14px;
   text-align: center;
 }
 #options_link a {
-  color: #808080;
+  color: #57606a;
 }
 #pattern_icon_lightfg {
   display: none;
 }
 
 #lookup_bubble {
-  --bubble-fg: #000;
+  --bubble-fg: #1f2328;
   --bubble-left: 0px;
   --table-left: 0px;
   --table-width: 0px;
@@ -143,10 +189,11 @@ img {
   --max-left: calc(var(--table-left) + var(--table-width) - var(--bubble-width));
   position: absolute;
   display: none;
-  background: #eee;
-  border: 1px solid var(--bubble-fg);
-  border-radius: 5px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
   box-sizing: border-box;
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.24);
   left: clamp(var(--table-left), var(--bubble-left), var(--max-left));
   max-width: var(--table-width);
 }
@@ -161,22 +208,42 @@ img {
   height: 0;
   border-left: var(--arrow-size) solid transparent;
   border-right: var(--arrow-size) solid transparent;
-  border-bottom: var(--arrow-size) solid var(--bubble-fg);
+  border-bottom: var(--arrow-size) solid #d0d7de;
 }
 #lookup_bubble a {
   display: block;
-  padding: 6pt;
+  padding: 8px 10px;
   color: var(--bubble-fg);
   text-decoration: none;
   white-space: nowrap;
   overflow-x: auto;
 }
+#lookup_bubble a:hover {
+  background-color: #f6f8fa;
+}
 
 /* dark mode */
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #222;
-    color: #eee;
+    background-color: #0d1117;
+    color: #e6edf3;
+  }
+  ::selection {
+    background-color: #1f6feb;
+  }
+  table {
+    background-image: linear-gradient(to right, transparent 0 27px, #30363d 27px 28px, transparent 28px);
+    border-color: #30363d;
+    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.35);
+  }
+  td, tr {
+    border-color: #30363d;
+  }
+  tr:hover {
+    background-color: #161b22;
+  }
+  .mainRow {
+    background-color: #161b22;
   }
   .sslImg {
     filter: invert(1);
@@ -185,16 +252,32 @@ img {
     filter: invert(1);
   }
   .addrTd {
-    color: #8080ff;
+    color: #79c0ff;
   }
   .ip4 {
-    color: #ff8080;
+    color: #ffa657;
   }
   .ip6 {
-    color: #80ff80;
+    color: #7ee787;
   }
   .highlight {
-    background-color: #505030;
+    background-color: #3b3200;
+  }
+  .geoTd {
+    color: #8b949e;
+  }
+  .geoPending::after {
+    background: linear-gradient(90deg, #30363d, #161b22, #30363d);
+    background-size: 200% 100%;
+  }
+  #beg {
+    background: #161b22;
+    border-color: #30363d;
+    color: #79c0ff;
+  }
+  #spill_count_container,
+  #options_link a {
+    color: #8b949e;
   }
   #pattern_icon_darkfg {
     display: none;
@@ -203,8 +286,25 @@ img {
     display: initial;
   }
   #lookup_bubble {
-    background: #666;
-    --bubble-fg: #eee;
+    background: #161b22;
+    border-color: #30363d;
+    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.45);
+    --bubble-fg: #e6edf3;
+  }
+  #lookup_bubble::before {
+    border-bottom-color: #30363d;
+  }
+  #lookup_bubble a:hover {
+    background-color: #0d1117;
+  }
+}
+
+@keyframes geoPulse {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
   }
 }
 

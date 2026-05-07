@@ -30,6 +30,56 @@ tests({
     assertEquals(parseIP("255.255.255.255"), "ffffffff");
     assertEquals(parseIP("1.2.3.4"), "01020304");
   },
+  'public_ip_for_geo': function() {
+    const publicCases = [
+      "8.8.8.8",
+      "1.1.1.1",
+      "2001:4860:4860::8888",
+      "::ffff:8.8.8.8",
+    ];
+    const privateCases = [
+      "0.0.0.0",
+      "10.0.0.1",
+      "100.64.0.1",
+      "127.0.0.1",
+      "169.254.0.1",
+      "172.16.0.1",
+      "192.0.2.1",
+      "192.168.0.1",
+      "198.18.0.1",
+      "198.51.100.1",
+      "203.0.113.1",
+      "224.0.0.1",
+      "255.255.255.255",
+      "::",
+      "::1",
+      "64:ff9b::808:808",
+      "100::1",
+      "2001:db8::1",
+      "fc00::1",
+      "fd00::1",
+      "fe80::1",
+      "ff02::1",
+      "::ffff:192.168.0.1",
+    ];
+    for (const input of publicCases) {
+      assert(isPublicIPForGeo(input), `input ${input} should be public`);
+    }
+    for (const input of privateCases) {
+      assert(!isPublicIPForGeo(input), `input ${input} should not be public`);
+    }
+  },
+  'geo_cache_key_for_ip': function() {
+    assertEquals(geoCacheKeyForIP("8.8.8.8"), "4:080808");
+    assertEquals(geoCacheKeyForIP("8.8.8.9"), "4:080808");
+    assertEquals(geoCacheKeyForIP("8.8.9.1"), "4:080809");
+    assertEquals(geoCacheKeyForIP("::ffff:8.8.8.8"), "4:080808");
+    assertEquals(geoCacheKeyForIP("2001:4860:4860::8888"), "6:200148604860");
+    assertEquals(geoCacheKeyForIP("2001:4860:4860::8844"), "6:200148604860");
+    assertEquals(geoCacheKeyForIP("2001:4860:4861::8888"), "6:200148604861");
+    assertEquals(geoCacheKeyForIP("192.168.0.1"), "");
+    assertEquals(geoCacheKeyForIP("2001:db8::1"), "");
+  },
   'bogus': function() {
     // Test cases from Guava InetAddressesTest.java
     const bogusInputs = [
