@@ -374,9 +374,7 @@ function scrollbarHack() {
   }
   setTimeout(() => {
     const e = document.documentElement;
-    if (e.scrollHeight > e.clientHeight) {
-      document.body.style.paddingRight = '20px';
-    } else if (!redrawn) {
+    if (e.scrollHeight <= e.clientHeight && !redrawn) {
       document.body.classList.toggle('force-redraw');
       redrawn = true;
     }
