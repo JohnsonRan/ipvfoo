@@ -20,7 +20,7 @@ limitations under the License.
 
 // Geo info fetch queue: up to 5 concurrent requests per 3-second batch.
 const geoInfoQueue = (() => {
-  const EMPTY = { country_code: "", region_code: "", organization: "" };
+  const EMPTY = { asn: "", country_code: "", region_code: "", organization: "" };
   const queue = [];
   const pendingByKey = new Map();  // CIDR cache key -> {callback, onPending}[]
   const cacheByKey = new Map();    // CIDR cache key -> geo info
@@ -39,7 +39,7 @@ const geoInfoQueue = (() => {
   }
 
   function hasGeoInfo(info) {
-    return !!(info?.country_code || info?.region_code || info?.organization);
+    return !!(info?.asn || info?.country_code || info?.region_code || info?.organization);
   }
 
   async function readCachedGeo(key) {
@@ -493,8 +493,8 @@ function makeRow(isFirst, tuple) {
   geoTd.title = "";
 
   if (isGeoLookupCandidate(addr)) {
-    geoInfoQueue.add(addr, ({ country_code, region_code, organization }) => {
-      const summary = [country_code, region_code, organization].filter(Boolean).join(" | ");
+    geoInfoQueue.add(addr, ({ asn, country_code, region_code, organization }) => {
+      const summary = [asn, country_code, region_code, organization].filter(Boolean).join(" | ");
       geoTd.classList.remove("geoPending");
       geoTd.textContent = summary;
       geoTd.title = summary;

@@ -715,7 +715,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Geo info cache in storage.local (7-day TTL).
-const GEO_EMPTY_INFO = { country_code: "", region_code: "", organization: "" };
+const GEO_EMPTY_INFO = { asn: "", country_code: "", region_code: "", organization: "" };
 const GEO_CACHE_MAX_ENTRIES = 2048;
 const GEO_CACHE_CLEANUP_INTERVAL = 60 * 60 * 1000;
 const GEO_FETCH_TIMEOUT = 8000;
@@ -856,14 +856,31 @@ async function clearGeoCache() {
 
 function normalizeGeoInfo(json) {
   return {
+    asn: normalizeAsn(json?.asn || json?.as || json?.autonomous_system_number || ""),
     country_code: json?.country_code || "",
-    region_code: json?.region_code || "",
+    region_code: normalizeRegionCode(json?.region_code || ""),
     organization: json?.organization || "",
   };
 }
 
 function hasGeoInfo(info) {
-  return !!(info?.country_code || info?.region_code || info?.organization);
+  return !!(info?.asn || info?.country_code || info?.region_code || info?.organization);
+}
+
+function normalizeAsn(asn) {
+  if (asn == null || asn === "") {
+    return "";
+  }
+  const text = String(asn).trim();
+  if (!text) {
+    return "";
+  }
+  return /^AS/i.test(text) ? text.toUpperCase() : `AS${text}`;
+}
+
+function normalizeRegionCode(regionCode) {
+  const text = String(regionCode || "").trim();
+  return /^\d+$/.test(text) ? "" : text;
 }
 
 function startGeoProvider(fetcher, ip) {
@@ -906,6 +923,7 @@ async function fetchGeoFromIpWhoIs(ip, signal) {
     throw new Error("ipwho.is returned error");
   }
   return normalizeGeoInfo({
+    asn: json?.connection?.asn || "",
     country_code: json?.country_code || json?.country || "",
     region_code: json?.region_code || json?.region || "",
     organization: json?.connection?.org || json?.organization || json?.isp || "",
