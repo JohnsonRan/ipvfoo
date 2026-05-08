@@ -156,8 +156,9 @@ function isGeoLookupCandidate(addr) {
 
 const ALL_URLS = "<all_urls>";
 
-// Snip domains longer than this, to avoid horizontal scrolling.
-const LONG_DOMAIN = 50;
+// Snip long labels, to avoid horizontal scrolling.
+const LONG_DOMAIN = 34;
+const LONG_ADDR = 27;
 
 const tabId = window.location.hash.substr(1);
 
@@ -470,6 +471,7 @@ function makeRow(isFirst, tuple) {
     selectMe.appendChild(document.createTextNode(domain));
   }
   domainTd.className = "domainTd";
+  domainTd.title = domain;
   domainTd.onclick = handleClick;
   domainTd.oncontextmenu = handleContextMenu;
 
@@ -482,7 +484,15 @@ function makeRow(isFirst, tuple) {
   }
   const connectedClass = (flags & DFLAG_CONNECTED) ? " highlight" : "";
   addrTd.className = `addrTd${addrClass}${connectedClass}`;
-  addrTd.appendChild(document.createTextNode(addr));
+  addrTd.title = addr;
+  if (addr.length > LONG_ADDR) {
+    const selectMe = document.createElement("span");
+    selectMe.className = "selectMe";
+    selectMe.appendChild(makeSnippedText(addr, Math.floor(LONG_ADDR / 2)));
+    addrTd.appendChild(selectMe);
+  } else {
+    addrTd.appendChild(document.createTextNode(addr));
+  }
   addrTd.onclick = handleClick;
   addrTd.oncontextmenu = handleContextMenu;
 
