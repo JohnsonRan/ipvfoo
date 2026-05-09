@@ -737,6 +737,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleFetchGeoInfo(message.ip).then(sendResponse, () => sendResponse(GEO_EMPTY_INFO));
     return true;
   }
+  if (message.cmd === "refreshGeoInfo") {
+    handleFetchGeoInfo(message.ip, true).then(sendResponse, () => sendResponse(GEO_EMPTY_INFO));
+    return true;
+  }
   if (message.cmd === "clearGeoCache") {
     clearGeoCache().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
     return true;
@@ -754,6 +758,16 @@ const GEO_API_IPWHOIS = "https://ipwho.is/";
 const geoFetchInFlight = new Map();
 let geoCacheCleanupPromise = null;
 let geoCacheLastCleanup = 0;
+
+function withGeoCacheMeta(info, geoCacheKey, meta = {}) {
+  return {
+    ...normalizeGeoInfo(info),
+    _cacheKey: geoCacheKey,
+    _cacheHit: !!meta.cacheHit,
+    _cacheAgeMs: Number.isFinite(meta.cacheAgeMs) ? meta.cacheAgeMs : null,
+    _cachedAt: Number.isFinite(meta.cachedAt) ? meta.cachedAt : null,
+  };
+}
 
 async function getGeoCacheIndex() {
   const items = await chrome.storage.local.get(GEO_CACHE_INDEX_KEY);
@@ -818,33 +832,40 @@ function maybeCleanupGeoCache() {
   })();
 }
 
-async function handleFetchGeoInfo(ip) {
+async function handleFetchGeoInfo(ip, forceRefresh = false) {
   await optionsReady;
   if (!options[GEO_INFO_ENABLED]) {
-    return GEO_EMPTY_INFO;
+    return withGeoCacheMeta(GEO_EMPTY_INFO, "", {});
   }
   const geoCacheKey = geoCacheKeyForIP(ip);
   if (!geoCacheKey) {
-    return GEO_EMPTY_INFO;
+    return withGeoCacheMeta(GEO_EMPTY_INFO, "", {});
   }
   maybeCleanupGeoCache();
   const cacheKey = GEO_CACHE_PREFIX + geoCacheKey;
 
-  // Fast path from cache.
-  try {
-    const cached = await chrome.storage.local.get(cacheKey);
-    const entry = cached[cacheKey];
-    const ttl = hasGeoInfo(entry?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
-    if (entry?.data && entry.timestamp && Date.now() - entry.timestamp < ttl) {
-      return normalizeGeoInfo(entry.data);
-    }
-    if (entry) {
-      chrome.storage.local.remove(cacheKey).catch(() => {});
-    }
-  } catch {}
+  if (!forceRefresh) {
+    // Fast path from cache.
+    try {
+      const cached = await chrome.storage.local.get(cacheKey);
+      const entry = cached[cacheKey];
+      const ttl = hasGeoInfo(entry?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
+      const ageMs = entry?.timestamp ? Date.now() - entry.timestamp : null;
+      if (entry?.data && entry.timestamp && ageMs < ttl) {
+        return withGeoCacheMeta(entry.data, geoCacheKey, {
+          cacheHit: true,
+          cacheAgeMs: ageMs,
+          cachedAt: entry.timestamp,
+        });
+      }
+      if (entry) {
+        chrome.storage.local.remove(cacheKey).catch(() => {});
+      }
+    } catch {}
+  }
 
   const inFlight = geoFetchInFlight.get(cacheKey);
-  if (inFlight) {
+  if (inFlight && !forceRefresh) {
     return inFlight;
   }
 
@@ -856,14 +877,14 @@ async function handleFetchGeoInfo(ip) {
       } catch {
         // ignore
       }
-      return GEO_EMPTY_INFO;
+      return withGeoCacheMeta(GEO_EMPTY_INFO, geoCacheKey, { cacheHit: false });
     }
     try {
       await setGeoCacheEntry(cacheKey, data);
     } catch {
       // ignore
     }
-    return data;
+    return withGeoCacheMeta(data, geoCacheKey, { cacheHit: false, cachedAt: Date.now() });
   })();
   geoFetchInFlight.set(cacheKey, fetchPromise);
   try {

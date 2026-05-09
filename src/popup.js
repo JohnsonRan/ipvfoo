@@ -20,7 +20,7 @@ limitations under the License.
 
 // Geo info fetch queue: up to 5 concurrent requests per 3-second batch.
 const geoInfoQueue = (() => {
-  const EMPTY = { asn: "", country_code: "", region_code: "", organization: "" };
+  const EMPTY = { asn: "", country_code: "", region_code: "", organization: "", _cacheKey: "" };
   const queue = [];
   const pendingByKey = new Map();  // CIDR cache key -> {callback, onPending}[]
   const cacheByKey = new Map();    // CIDR cache key -> geo info
@@ -30,9 +30,10 @@ const geoInfoQueue = (() => {
   const MAX_CONCURRENT = 5;
   const INTERVAL_MS = 3000;
 
-  async function fetchGeo(ip) {
+  async function fetchGeo(ip, forceRefresh = false) {
     try {
-      return await chrome.runtime.sendMessage({ cmd: "fetchGeoInfo", ip }) || EMPTY;
+      const cmd = forceRefresh ? "refreshGeoInfo" : "fetchGeoInfo";
+      return await chrome.runtime.sendMessage({ cmd, ip }) || EMPTY;
     } catch {
       return EMPTY;
     }
@@ -49,7 +50,13 @@ const geoInfoQueue = (() => {
       const entry = cached[storageKey];
       const ttl = hasGeoInfo(entry?.data) ? GEO_CACHE_TTL : GEO_NEGATIVE_CACHE_TTL;
       if (entry?.data && entry.timestamp && Date.now() - entry.timestamp < ttl) {
-        return entry.data || EMPTY;
+        return {
+          ...(entry.data || EMPTY),
+          _cacheKey: key,
+          _cacheHit: true,
+          _cacheAgeMs: Date.now() - entry.timestamp,
+          _cachedAt: entry.timestamp,
+        };
       }
     } catch {
       // ignore
@@ -73,7 +80,7 @@ const geoInfoQueue = (() => {
   async function runOne(entry) {
     let info = EMPTY;
     try {
-      info = await fetchGeo(entry.ip);
+      info = await fetchGeo(entry.ip, entry.forceRefresh);
     } catch {
       info = EMPTY;
     }
@@ -109,15 +116,18 @@ const geoInfoQueue = (() => {
     }
   }
 
-  function add(ip, callback, onPending) {
+  function add(ip, callback, onPending, forceRefresh = false) {
     const key = geoCacheKeyForIP(ip);
     if (!key) {
       callback(EMPTY);
       return;
     }
-    if (cacheByKey.has(key)) {
+    if (!forceRefresh && cacheByKey.has(key)) {
       callback(cacheByKey.get(key));
       return;
+    }
+    if (forceRefresh) {
+      cacheByKey.delete(key);
     }
     const pending = pendingByKey.get(key);
     if (pending) {
@@ -125,6 +135,15 @@ const geoInfoQueue = (() => {
       return;
     }
     pendingByKey.set(key, [{ callback, onPending }]);
+    if (forceRefresh) {
+      const pending = pendingByKey.get(key);
+      for (const item of pending) {
+        item.onPending?.();
+      }
+      queue.unshift({ key, ip, forceRefresh: true });
+      process();
+      return;
+    }
     readCachedGeo(key).then((info) => {
       if (info) {
         deliver(key, info);
@@ -141,8 +160,52 @@ const geoInfoQueue = (() => {
     });
   }
 
-  return { add };
+  function refresh(ip, callback, onPending) {
+    add(ip, callback, onPending, true);
+  }
+
+  return { add, refresh };
 })();
+
+function formatGeoAge(ms) {
+  if (!Number.isFinite(ms) || ms < 0) {
+    return "";
+  }
+  if (ms < 60 * 1000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 60 * 60 * 1000) return `${Math.round(ms / (60 * 1000))}m`;
+  if (ms < 24 * 60 * 60 * 1000) return `${Math.round(ms / (60 * 60 * 1000))}h`;
+  return `${Math.round(ms / (24 * 60 * 60 * 1000))}d`;
+}
+
+function formatGeoCacheTime(timestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return "";
+  }
+}
+
+function geoTitle(info) {
+  const lines = [];
+  if (info.asn) lines.push(`ASN: ${info.asn}`);
+  if (info.country_code) lines.push(`Country: ${info.country_code}`);
+  if (info.region_code) lines.push(`Region: ${info.region_code}`);
+  if (info.organization) lines.push(`Organization: ${info.organization}`);
+  if (info._cacheKey) lines.push(`CIDR cache key: ${info._cacheKey}`);
+  if (info._cacheHit) {
+    const age = formatGeoAge(info._cacheAgeMs);
+    const cachedAt = formatGeoCacheTime(info._cachedAt);
+    lines.push(`Cache: hit${age ? ` (${age} old)` : ""}`);
+    if (cachedAt) lines.push(`Cached at: ${cachedAt}`);
+  } else if (info._cacheKey) {
+    lines.push("Cache: refreshed");
+  }
+  if (info._cacheKey) lines.push("Click to refresh Geo cache");
+  return lines.join("\n");
+}
 
 function isGeoLookupCandidate(addr) {
   if (!options[GEO_INFO_ENABLED]) {
@@ -503,12 +566,20 @@ function makeRow(isFirst, tuple) {
   geoTd.title = "";
 
   if (isGeoLookupCandidate(addr)) {
-    geoInfoQueue.add(addr, ({ asn, country_code, region_code, organization }) => {
+    const showGeoInfo = (info) => {
+      const { asn, country_code, region_code, organization } = info;
       const summary = [asn, country_code, region_code, organization].filter(Boolean).join(" | ");
       geoTd.classList.remove("geoPending");
       geoTd.textContent = summary;
-      geoTd.title = summary;
-    }, () => geoTd.classList.add("geoPending"));
+      geoTd.title = geoTitle(info) || summary;
+    };
+    const showGeoPending = () => {
+      geoTd.classList.add("geoPending");
+      geoTd.title = "Refreshing Geo cache...";
+    };
+    geoTd.classList.add("geoRefreshable");
+    geoTd.onclick = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);
+    geoInfoQueue.add(addr, showGeoInfo, showGeoPending);
   }
 
   // Build the "Request Count" column.
