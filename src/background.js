@@ -489,6 +489,8 @@ class TabInfo extends SaveableEntry {
   }
 }
 
+const ERROR_CLEAR_SUCCESS_THRESHOLD = 5;
+
 class DomainInfo {
   tabInfo;
   domain;
@@ -501,6 +503,7 @@ class DomainInfo {
   completedMs = null;
   requestCount = 0;
   errorStatus = null;
+  successSinceError = 0;
 
   constructor(tabInfo, domain, addr, flags) {
     this.tabInfo = tabInfo;
@@ -518,16 +521,18 @@ class DomainInfo {
       this.completedMs,
       this.requestCount,
       this.errorStatus,
+      this.successSinceError,
     ];
   }
 
   static fromJSON(tabInfo, domain, json) {
-    const [addr, flags, firstMs, completedMs, requestCount, errorStatus] = json;
+    const [addr, flags, firstMs, completedMs, requestCount, errorStatus, successSinceError] = json;
     const d = new DomainInfo(tabInfo, domain, addr, flags);
     d.firstMs = Number.isFinite(firstMs) ? firstMs : null;
     d.completedMs = Number.isFinite(completedMs) ? completedMs : null;
     d.requestCount = Number.isFinite(requestCount) ? requestCount : 0;
     d.errorStatus = Number.isFinite(errorStatus) ? errorStatus : null;
+    d.successSinceError = Number.isFinite(successSinceError) ? successSinceError : 0;
     return d;
   }
 
@@ -581,11 +586,25 @@ class DomainInfo {
     if (countRequest) {
       this.requestCount++;
     }
-    if (Number.isFinite(statusCode) && statusCode >= 400) {
-      this.errorStatus = Math.round(statusCode);
-      return true;
+    this.recordStatus(statusCode);
+  }
+
+  recordStatus(statusCode) {
+    if (!Number.isFinite(statusCode)) {
+      return;
     }
-    return false;
+    if (statusCode >= 400) {
+      this.errorStatus = Math.round(statusCode);
+      this.successSinceError = 0;
+      return;
+    }
+    if (this.errorStatus != null) {
+      this.successSinceError++;
+      if (this.successSinceError >= ERROR_CLEAR_SUCCESS_THRESHOLD) {
+        this.errorStatus = null;
+        this.successSinceError = 0;
+      }
+    }
   }
 
   countDown() {
