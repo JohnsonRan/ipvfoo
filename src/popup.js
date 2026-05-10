@@ -227,17 +227,13 @@ const tabId = window.location.hash.substr(1);
 
 let table = null;
 
+const POPUP_MAX_WIDTH = 780;
+const POPUP_MAX_HEIGHT = 580;
+
 window.onload = async function() {
   table = document.getElementById("addr_table");
   table.onmousedown = handleMouseDown;
 
-  if (IS_MOBILE) {
-    document.getElementById("mobile_footer").style.display = "flex";
-
-    document.addEventListener("selectionchange", redrawLookupBubble);
-    const resizeObserver = new ResizeObserver(redrawLookupBubble);
-    resizeObserver.observe(table);
-  }
   if (/^[0-9]+$/.test(tabId)) {
     await beg();
     connectToExtension();
@@ -253,6 +249,35 @@ window.onload = async function() {
     pushAll(TEST_TUPLES, "646", REGULAR_COLOR, 0);
   }
 };
+
+function resizePopupToContent() {
+  requestAnimationFrame(() => {
+    const border = document.querySelector(".border");
+    if (!border) {
+      return;
+    }
+
+    document.body.style.width = "";
+    document.body.style.height = "";
+    document.body.style.overflow = "";
+    border.style.maxWidth = "";
+    border.style.maxHeight = "";
+    border.style.overflow = "";
+
+    const bodyStyle = getComputedStyle(document.body);
+    const horizontalPadding = parseFloat(bodyStyle.paddingLeft) + parseFloat(bodyStyle.paddingRight);
+    const verticalPadding = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom);
+    const width = Math.min(Math.ceil(border.scrollWidth + horizontalPadding), POPUP_MAX_WIDTH);
+    const height = Math.min(Math.ceil(border.scrollHeight + verticalPadding), POPUP_MAX_HEIGHT);
+
+    document.body.style.width = `${width}px`;
+    document.body.style.height = `${height}px`;
+    document.body.style.overflow = "hidden";
+    border.style.maxWidth = `${Math.max(0, width - horizontalPadding)}px`;
+    border.style.maxHeight = `${Math.max(0, height - verticalPadding)}px`;
+    border.style.overflow = "auto";
+  });
+}
 
 // Monitor for dark mode updates.
 const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -274,6 +299,7 @@ async function beg() {
   }
   const button = document.getElementById("beg");
   button.style.display = "block";  // visible
+  resizePopupToContent();
   button.addEventListener("click", async () => {
     // We need to close the popup before awaiting, otherwise
     // Firefox (at least version 116 on Windows) renders the
@@ -282,35 +308,6 @@ async function beg() {
     window.close();
     await promise;
   });
-}
-
-function redrawLookupBubble() {
-  const bubble = document.getElementById("lookup_bubble");
-  const sel = window.getSelection();
-  const text = sel.toString();
-  const menuTitle = lookupMenuTitle(text);
-  const href = selectionToLookupUrl(text)?.href;
-
-  if (!(menuTitle && href)) {
-    bubble.style.display = "none";
-    return;
-  }
-
-  const link = document.getElementById("lookup_link");
-  link.textContent = menuTitle;
-  link.href = href;
-
-  const selRect = sel.getRangeAt(0).getBoundingClientRect();
-  const tableRect = table.getBoundingClientRect();
-
-  bubble.style.display = "block";
-  bubble.style.top = `${selRect.bottom + window.scrollY + 5}px`;
-  bubble.style.setProperty('--bubble-left', `${selRect.left - 10}px`);
-  bubble.style.setProperty('--table-left', `${tableRect.left}px`);
-  bubble.style.setProperty('--table-width', `${tableRect.width}px`);
-
-  const bubbleRect = bubble.getBoundingClientRect();
-  bubble.style.setProperty('--bubble-width', `${bubbleRect.width}px`);
 }
 
 function connectToExtension() {
@@ -346,6 +343,7 @@ function pushAll(tuples, pattern, color, spillCount) {
   }
   pushPattern(pattern, color);
   pushSpillCount(spillCount);
+  resizePopupToContent();
 }
 
 // Insert or update a single table row.
@@ -368,31 +366,15 @@ function pushOne(tuple) {
   }
   // No exact match.  Insert the row in alphabetical order.
   table.insertBefore(makeRow(false, tuple), insertHere);
-  if (IS_MOBILE) {
-    zoomHack();
-  } else {
-    scrollbarHack();
-  }
+  scrollbarHack();
+  resizePopupToContent();
 }
 
-let lastPattern = "";
 let lastColor = "";  // regular/incognito color scheme
 function pushPattern(pattern, color) {
   if (lastColor != color) {
     lastColor = color;
     setColorIsDarkMode(lastColor, darkMode);
-  }
-  if (!IS_MOBILE) {
-    return;
-  }
-  if (lastPattern != pattern) {
-    lastPattern = pattern;
-  } else {
-    return;
-  }
-  for (const color of ["darkfg", "lightfg"]) {
-    const img = document.getElementById(`pattern_icon_${color}`);
-    img.src = iconPath(pattern, 32, color);
   }
 }
 
@@ -402,11 +384,8 @@ function pushSpillCount(count) {
       count == 0 ? "none" : "block";
   removeChildren(document.getElementById("spill_count")).appendChild(
       document.createTextNode(count));
-  if (IS_MOBILE) {
-    zoomHack();
-  } else {
-    scrollbarHack();
-  }
+  scrollbarHack();
+  resizePopupToContent();
 }
 
 // Shake the content (for 500ms) to signal an error.
@@ -415,19 +394,6 @@ function shake() {
   setTimeout(function() {
     document.body.className = "";
   }, 600);
-}
-
-// On mobile, zoom in so the table fills the viewport.
-function zoomHack() {
-  // This value is actually a bit smaller than we want,
-  // but apparently a too-narrow viewport results in a best-fit zoom.
-  const tableWidth = document.querySelector('table').offsetWidth;
-  document.querySelector('meta[name="viewport"]').setAttribute('content', `width=${tableWidth}`);
-
-  // Leave room to the right for the text selection handle,
-  // to prevent jittery zooming if the user selects an IP address.
-  // 8% of the table width seems reasonable.
-  table.style.setProperty('--cache-min-width', `${tableWidth * 0.08}px`);
 }
 
 // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1395025
@@ -572,10 +538,12 @@ function makeRow(isFirst, tuple) {
       geoTd.classList.remove("geoPending");
       geoTd.textContent = summary;
       geoTd.title = geoTitle(info) || summary;
+      resizePopupToContent();
     };
     const showGeoPending = () => {
       geoTd.classList.add("geoPending");
       geoTd.title = "Refreshing Geo cache...";
+      resizePopupToContent();
     };
     geoTd.classList.add("geoRefreshable");
     geoTd.onclick = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);

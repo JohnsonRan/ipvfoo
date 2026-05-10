@@ -201,71 +201,6 @@ img {
   color: #6e7781;
   margin-top: 8px;
 }
-#mobile_footer {
-  display: none; /* or flex */
-  justify-content: space-between;
-  align-items: center;
-}
-#options_link {
-  padding-top: 16px;
-  padding-bottom: 14px;
-  flex: 1;
-  font-size: 14px;
-  text-align: center;
-}
-#options_link a {
-  color: #57606a;
-}
-#pattern_icon_lightfg {
-  display: none;
-}
-
-#lookup_bubble {
-  --bubble-fg: #1f2328;
-  --bubble-left: 0px;
-  --table-left: 0px;
-  --table-width: 0px;
-  --bubble-width: 0px;
-  --max-left: calc(var(--table-left) + var(--table-width) - var(--bubble-width));
-  position: absolute;
-  display: none;
-  background: #fff;
-  border: 1px solid #d0d7de;
-  border-radius: 8px;
-  box-sizing: border-box;
-  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.24);
-  left: clamp(var(--table-left), var(--bubble-left), var(--max-left));
-  max-width: var(--table-width);
-}
-#lookup_bubble::before {
-  /* arrow pointing up from the border. */
-  --arrow-size: 5px;
-  content: "";
-  position: absolute;
-  top: calc(-1 * var(--arrow-size));
-  left: calc(var(--bubble-left) - min(var(--bubble-left), var(--max-left)) + 10px);
-  width: 0;
-  height: 0;
-  border-left: var(--arrow-size) solid transparent;
-  border-right: var(--arrow-size) solid transparent;
-  border-bottom: var(--arrow-size) solid #d0d7de;
-}
-#lookup_bubble a {
-  display: block;
-  padding: 8px 10px;
-  color: var(--bubble-fg);
-  text-decoration: none;
-  white-space: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-#lookup_bubble a::-webkit-scrollbar {
-  display: none;
-}
-#lookup_bubble a:hover {
-  background-color: #f6f8fa;
-}
-
 /* dark mode */
 @media (prefers-color-scheme: dark) {
   body {
@@ -329,27 +264,8 @@ img {
     border-color: #30363d;
     color: #79c0ff;
   }
-  #spill_count_container,
-  #options_link a {
+  #spill_count_container {
     color: #8b949e;
-  }
-  #pattern_icon_darkfg {
-    display: none;
-  }
-  #pattern_icon_lightfg {
-    display: initial;
-  }
-  #lookup_bubble {
-    background: #161b22;
-    border-color: #30363d;
-    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.45);
-    --bubble-fg: #e6edf3;
-  }
-  #lookup_bubble::before {
-    border-bottom-color: #30363d;
-  }
-  #lookup_bubble a:hover {
-    background-color: #0d1117;
   }
 }
 
@@ -389,14 +305,6 @@ img {
   <table id="addr_table" height="1px"></table>
   <div id="spill_count_container">
   &#x22ee; <span id="spill_count">0</span> requests omitted
-  </div>
-  <div id="mobile_footer">
-    <div id="options_link"><a href="options.html">Options</a></div>
-    <img id="pattern_icon_lightfg">
-    <img id="pattern_icon_darkfg">
-  </div>
-  <div id="lookup_bubble">
-    <a id="lookup_link" href="#" target="_blank">Lookup on lookup.example.com</a>
   </div>
 </div>
 </body>

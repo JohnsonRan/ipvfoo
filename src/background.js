@@ -393,11 +393,7 @@ class TabInfo extends SaveableEntry {
     for (const [domain, d] of Object.entries(this.domains)) {
       if (domain == this.mainDomain) {
         pattern = d.addrVersion();
-        if (IS_MOBILE) {
-          tooltip = d.addr;  // Limited tooltip space on Android.
-        } else {
-          tooltip = `${d.addr}\n${NAME_VERSION}`;
-        }
+        tooltip = `${d.addr}\n${NAME_VERSION}`;
       } else {
         switch (d.addrVersion()) {
           case "4": has4 = true; break;
