@@ -234,6 +234,15 @@ window.onload = async function() {
   table = document.getElementById("addr_table");
   table.onmousedown = handleMouseDown;
 
+  const optionsLink = document.getElementById("options_link");
+  optionsLink?.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      window.close();
+    }
+  });
+
   if (/^[0-9]+$/.test(tabId)) {
     await beg();
     connectToExtension();
@@ -433,6 +442,8 @@ function makeImg(src, title) {
   const img = document.createElement("img");
   img.src = src;
   img.title = title;
+  // Empty title => decorative (e.g. the "..." snip image); hide from AT.
+  img.alt = title;
   return img;
 }
 
@@ -546,7 +557,17 @@ function makeRow(isFirst, tuple) {
       resizePopupToContent();
     };
     geoTd.classList.add("geoRefreshable");
-    geoTd.onclick = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);
+    geoTd.setAttribute("role", "button");
+    geoTd.setAttribute("tabindex", "0");
+    geoTd.setAttribute("aria-label", `Refresh Geo info for ${addr}`);
+    const doRefresh = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);
+    geoTd.onclick = doRefresh;
+    geoTd.onkeydown = (e) => {
+      if (e.key == "Enter" || e.key == " ") {
+        e.preventDefault();
+        doRefresh();
+      }
+    };
     geoInfoQueue.add(addr, showGeoInfo, showGeoPending);
   }
 

@@ -108,12 +108,18 @@ img {
   padding-right: 6pt;
   border-left-width: 0;
   border-right-width: 0;
-  max-width: 130px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .geoRefreshable {
   cursor: pointer;
+}
+.geoRefreshable:focus-visible,
+#options_link:focus-visible {
+  outline: 2px solid #0969da;
+  outline-offset: 1px;
+  border-radius: 4px;
 }
 .geoPending::after {
   content: "";
@@ -201,6 +207,29 @@ img {
   color: #6e7781;
   margin-top: 8px;
 }
+#popup_footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+#options_link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6e7781;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+#options_link:hover {
+  color: #0969da;
+  text-decoration: underline;
+}
+#options_gear {
+  font-size: 13px;
+  line-height: 1;
+}
 /* dark mode */
 @media (prefers-color-scheme: dark) {
   body {
@@ -267,6 +296,16 @@ img {
   #spill_count_container {
     color: #8b949e;
   }
+  #options_link {
+    color: #8b949e;
+  }
+  #options_link:hover {
+    color: #79c0ff;
+  }
+  .geoRefreshable:focus-visible,
+  #options_link:focus-visible {
+    outline-color: #1f6feb;
+  }
 }
 
 @keyframes geoPulse {
@@ -305,6 +344,11 @@ img {
   <table id="addr_table" height="1px"></table>
   <div id="spill_count_container">
   &#x22ee; <span id="spill_count">0</span> requests omitted
+  </div>
+  <div id="popup_footer">
+    <a id="options_link" href="#" title="Open IPvFoo options">
+      <span id="options_gear">&#x2699;&#xFE0E;</span><span>Options</span>
+    </a>
   </div>
 </div>
 </body>
