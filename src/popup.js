@@ -364,6 +364,7 @@ function pushOne(tuple) {
   for (let tr = table.firstChild; tr; tr = tr.nextSibling) {
     if (tr._domain == domain) {
       // Found an exact match.  Update the row.
+      hideMetaTooltip();
       minimalCopy(makeRow(isFirst, tuple), tr);
       return;
     }
@@ -424,6 +425,7 @@ function scrollbarHack() {
 // Copy the contents of src into dst, making minimal changes.
 function minimalCopy(src, dst) {
   dst.className = src.className;
+  dst._meta = src._meta;
   for (let s = src.firstChild, d = dst.firstChild, sNext, dNext;
        s && d;
        s = sNext, d = dNext) {
@@ -654,6 +656,10 @@ function makeRow(isFirst, tuple) {
 
   // Row-level meta drives the custom hover tooltip (count + timing).
   tr._meta = { requestCount, errorStatus, firstMs, completedMs };
+  const metaTitle = formatRowMeta(tr._meta);
+  if (metaTitle) {
+    geoStateTd.title = metaTitle;
+  }
   tr.onmouseenter = () => showMetaTooltip(tr);
   tr.onmouseleave = hideMetaTooltip;
   tr.onfocusin = () => showMetaTooltip(tr);
