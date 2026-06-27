@@ -37,8 +37,6 @@ body {
   color: #1f2328;
   box-sizing: border-box;
 }
-/* We want copy-paste to keep the domain in the first column,
-   so this draws a vertical line to fake the "zeroth" column. */
 table {
   --cache-min-width: 0px;
   border: 1px solid #e1e4e8;
@@ -92,25 +90,6 @@ img {
   user-select: text;
   cursor: text;
 }
-.cacheTd {
-  border-left-width: 0;
-  text-align: right;
-  min-width: var(--cache-min-width);
-}
-.cacheTd img {
-  opacity: 0.72;
-}
-.geoTd {
-  font-size: 12px;
-  color: #57606a;
-  padding-left: 6pt;
-  padding-right: 6pt;
-  border-left-width: 0;
-  border-right-width: 0;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .geoRefreshable {
   cursor: pointer;
 }
@@ -129,33 +108,6 @@ img {
   background: linear-gradient(90deg, #d0d7de, #f6f8fa, #d0d7de);
   background-size: 200% 100%;
   animation: geoPulse 1.2s ease-in-out infinite;
-}
-.countTd,
-.statusTd {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  color: #57606a;
-  text-align: right;
-  border-left-width: 0;
-  border-right-width: 0;
-  min-width: 24px;
-  padding-left: 4pt;
-  padding-right: 4pt;
-}
-.countTd {
-  color: #6e7781;
-}
-.statusTd.errorStatus {
-  color: #cf222e;
-  font-weight: 600;
-}
-.timingTd {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  color: #57606a;
-  text-align: right;
-  border-left-width: 0;
-  max-width: 95px;
 }
 .ip4 {
   color: #bc4c00;
@@ -313,19 +265,6 @@ img {
   }
   .highlight {
     background-color: #3b3200;
-  }
-  .geoTd {
-    color: #8b949e;
-  }
-  .countTd,
-  .statusTd {
-    color: #8b949e;
-  }
-  .statusTd.errorStatus {
-    color: #ff7b72;
-  }
-  .timingTd {
-    color: #8b949e;
   }
   .geoPending::after {
     background: linear-gradient(90deg, #30363d, #161b22, #30363d);
