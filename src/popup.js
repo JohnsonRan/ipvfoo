@@ -346,6 +346,7 @@ function connectToExtension() {
 
 // Clear the table, and fill it with new data.
 function pushAll(tuples, pattern, color, spillCount) {
+  hideMetaTooltip();
   removeChildren(table);
   for (let i = 0; i < tuples.length; i++) {
     table.appendChild(makeRow(i == 0, tuples[i]));
@@ -478,6 +479,58 @@ function formatDuration(ms) {
   return `${Math.round(ms / 1000)}s`;
 }
 
+function formatRowMeta(meta) {
+  const lines = [];
+  if (meta.requestCount > 0) {
+    lines.push(`Requests: ${meta.requestCount}`);
+  }
+  const firstText = formatDuration(meta.firstMs);
+  const completedText = formatDuration(meta.completedMs);
+  if (firstText || completedText) {
+    lines.push(`Fastest first response: ${firstText || "unknown"}`);
+    lines.push(`Longest completed request: ${completedText || "pending"}`);
+  }
+  if (Number.isFinite(meta.errorStatus) && meta.errorStatus >= 400) {
+    lines.push(`Last error status: ${meta.errorStatus}`);
+  }
+  return lines.join("\n");
+}
+
+let metaTooltipEl = null;
+function showMetaTooltip(tr) {
+  const meta = tr._meta;
+  if (!meta) return;
+  const text = formatRowMeta(meta);
+  if (!text) return;
+  if (!metaTooltipEl) {
+    metaTooltipEl = document.getElementById("meta_tooltip");
+  }
+  metaTooltipEl.textContent = text;
+  metaTooltipEl.classList.add("visible");
+  metaTooltipEl.setAttribute("aria-hidden", "false");
+
+  // Position near the row, clamped within the viewport (popup bounds).
+  const rect = tr.getBoundingClientRect();
+  const tip = metaTooltipEl.getBoundingClientRect();
+  const margin = 6;
+  let top = rect.bottom + margin;
+  if (top + tip.height > window.innerHeight) {
+    top = Math.max(margin, rect.top - tip.height - margin);
+  }
+  let left = rect.left;
+  if (left + tip.width > window.innerWidth) {
+    left = Math.max(margin, window.innerWidth - tip.width - margin);
+  }
+  metaTooltipEl.style.top = `${top}px`;
+  metaTooltipEl.style.left = `${left}px`;
+}
+
+function hideMetaTooltip() {
+  if (!metaTooltipEl) return;
+  metaTooltipEl.classList.remove("visible");
+  metaTooltipEl.setAttribute("aria-hidden", "true");
+}
+
 function makeRow(isFirst, tuple) {
   const domain = tuple[0];
   const addr = tuple[1];
@@ -536,33 +589,35 @@ function makeRow(isFirst, tuple) {
   addrTd.onclick = handleClick;
   addrTd.oncontextmenu = handleContextMenu;
 
-  // Build the "Geo Info" column.
-  const geoTd = document.createElement("td");
-  geoTd.className = `geoTd${connectedClass}`;
-  geoTd.textContent = "";
-  geoTd.title = "";
+  // Build the merged "Geo + State" column.
+  const geoStateTd = document.createElement("td");
+  geoStateTd.className = `geoStateTd${connectedClass}`;
+
+  const geoText = document.createElement("span");
+  geoText.className = "geoText";
+  geoStateTd.appendChild(geoText);
 
   if (isGeoLookupCandidate(addr)) {
     const showGeoInfo = (info) => {
       const { asn, country_code, region_code, organization } = info;
       const summary = [asn, country_code, region_code, organization].filter(Boolean).join(" | ");
-      geoTd.classList.remove("geoPending");
-      geoTd.textContent = summary;
-      geoTd.title = geoTitle(info) || summary;
+      geoText.classList.remove("geoPending");
+      geoText.textContent = summary;
+      geoText.title = geoTitle(info) || summary;
       resizePopupToContent();
     };
     const showGeoPending = () => {
-      geoTd.classList.add("geoPending");
-      geoTd.title = "Refreshing Geo cache...";
+      geoText.classList.add("geoPending");
+      geoText.title = "Refreshing Geo cache...";
       resizePopupToContent();
     };
-    geoTd.classList.add("geoRefreshable");
-    geoTd.setAttribute("role", "button");
-    geoTd.setAttribute("tabindex", "0");
-    geoTd.setAttribute("aria-label", `Refresh Geo info for ${addr}`);
+    geoText.classList.add("geoRefreshable");
+    geoText.setAttribute("role", "button");
+    geoText.setAttribute("tabindex", "0");
+    geoText.setAttribute("aria-label", `Refresh Geo info for ${addr}`);
     const doRefresh = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);
-    geoTd.onclick = doRefresh;
-    geoTd.onkeydown = (e) => {
+    geoText.onclick = doRefresh;
+    geoText.onkeydown = (e) => {
       if (e.key == "Enter" || e.key == " ") {
         e.preventDefault();
         doRefresh();
@@ -571,71 +626,43 @@ function makeRow(isFirst, tuple) {
     geoInfoQueue.add(addr, showGeoInfo, showGeoPending);
   }
 
-  // Build the "Request Count" column.
-  const countTd = document.createElement("td");
-  countTd.className = `countTd${connectedClass}`;
-  if (requestCount > 0) {
-    countTd.textContent = String(requestCount);
-    countTd.title = `Requests: ${requestCount}`;
-  }
-
-  // Build the "Error Status" column.
-  const statusTd = document.createElement("td");
-  statusTd.className = `statusTd${connectedClass}`;
-  if (Number.isFinite(errorStatus) && errorStatus >= 400) {
-    statusTd.textContent = String(errorStatus);
-    statusTd.title = `Last error status: ${errorStatus}`;
-    statusTd.classList.add("errorStatus");
-  }
-
-  // Build the "Timing" column.
-  const timingTd = document.createElement("td");
-  timingTd.className = `timingTd${connectedClass}`;
-  const firstText = formatDuration(firstMs);
-  const completedText = formatDuration(completedMs);
-  if (firstText || completedText) {
-    timingTd.textContent = `${firstText || "-"} / ${completedText || "..."}`;
-    timingTd.title =
-        `Fastest first response: ${firstText || "unknown"}\n` +
-        `Longest completed request: ${completedText || "pending"}`;
-  }
-
-  // Build the (possibly invisible) "WebSocket/Cached" column.
-  // We don't need to worry about drawing both, because a cached WebSocket
-  // would be nonsensical.
-  //
-  // Now that we also have a Service Worker icon, I just made it replace
-  // the Cached icon because I'm too lazy to align multiple columns properly.
-  const cacheTd = document.createElement("td");
-  cacheTd.className = `cacheTd${connectedClass}`;
+  // State icon (websocket/prefetch/serviceworker/cache), small and dim.
+  // A cached WebSocket would be nonsensical, so at most one applies.
+  let stateImg = null;
   if (flags & DFLAG_WEBSOCKET) {
-    cacheTd.appendChild(
-        makeImg("websocket.png", "WebSocket handshake; connection may still be active."));
-    cacheTd.style.paddingLeft = '6pt';
+    stateImg = makeImg("websocket.png", "WebSocket handshake; connection may still be active.");
   } else if (flags & AFLAG_PREFETCH) {
-    cacheTd.appendChild(
-        makeImg("prefetch.png", "Prefetched request; may be proxied."));
-    cacheTd.style.paddingLeft = '6pt';
+    stateImg = makeImg("prefetch.png", "Prefetched request; may be proxied.");
   } else if (flags & AFLAG_WORKER) {
-    cacheTd.appendChild(
-        makeImg("serviceworker.png", "Service Worker request; possibly from a different tab."));
-    cacheTd.style.paddingLeft = '6pt';
+    stateImg = makeImg("serviceworker.png", "Service Worker request; possibly from a different tab.");
   } else if (flags & AFLAG_CACHE) {
-    cacheTd.appendChild(
-        makeImg("cached_arrow.png", "Data from cached requests only."));
-    cacheTd.style.paddingLeft = '6pt';
-  } else {
-    cacheTd.style.paddingLeft = '0';
+    stateImg = makeImg("cached_arrow.png", "Data from cached requests only.");
   }
+  if (stateImg) {
+    stateImg.className = "stateImg";
+    geoStateTd.appendChild(stateImg);
+  }
+
+  // Visible error-status badge (rare + important).
+  if (Number.isFinite(errorStatus) && errorStatus >= 400) {
+    const badge = document.createElement("span");
+    badge.className = "statusBadge";
+    badge.textContent = String(errorStatus);
+    badge.title = `Last error status: ${errorStatus}`;
+    geoStateTd.appendChild(badge);
+  }
+
+  // Row-level meta drives the custom hover tooltip (count + timing).
+  tr._meta = { requestCount, errorStatus, firstMs, completedMs };
+  tr.onmouseenter = () => showMetaTooltip(tr);
+  tr.onmouseleave = hideMetaTooltip;
+  tr.onfocusin = () => showMetaTooltip(tr);
+  tr.onfocusout = hideMetaTooltip;
 
   tr._domain = domain;
   tr.appendChild(domainTd);
   tr.appendChild(addrTd);
-  tr.appendChild(geoTd);
-  tr.appendChild(countTd);
-  tr.appendChild(statusTd);
-  tr.appendChild(timingTd);
-  tr.appendChild(cacheTd);
+  tr.appendChild(geoStateTd);
   return tr;
 }
 

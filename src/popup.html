@@ -229,6 +229,51 @@ img {
   font-size: 13px;
   line-height: 1;
 }
+.metaTooltip {
+  position: fixed;
+  z-index: 10;
+  display: none;
+  max-width: 240px;
+  padding: 6px 9px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2328;
+  box-shadow: 0 4px 14px rgba(140, 149, 159, 0.28);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  pointer-events: none;
+}
+.metaTooltip.visible {
+  display: block;
+}
+.statusBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ffebe9;
+  color: #cf222e;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.geoStateTd {
+  font-size: 12px;
+  color: #57606a;
+  padding-left: 6pt;
+  border-left-width: 0;
+  border-right-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.geoStateTd .stateImg {
+  opacity: 0.6;
+  margin-left: 6px;
+}
+
 /* dark mode */
 @media (prefers-color-scheme: dark) {
   body {
@@ -304,6 +349,19 @@ img {
   #options_link:focus-visible {
     outline-color: #1f6feb;
   }
+  .metaTooltip {
+    border-color: #30363d;
+    background: #161b22;
+    color: #e6edf3;
+    box-shadow: 0 4px 14px rgba(1, 4, 9, 0.5);
+  }
+  .statusBadge {
+    background: #3a1d1d;
+    color: #ff7b72;
+  }
+  .geoStateTd {
+    color: #8b949e;
+  }
 }
 
 @keyframes geoPulse {
@@ -338,6 +396,7 @@ img {
 </head>
 <body>
 <div class="border">
+  <div id="meta_tooltip" class="metaTooltip" role="tooltip" aria-hidden="true"></div>
   <button id="beg">Click to grant permission</button>
   <table id="addr_table" height="1px"></table>
   <div id="spill_count_container">
