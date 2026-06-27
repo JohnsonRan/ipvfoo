@@ -498,6 +498,20 @@ function formatRowMeta(meta) {
   return lines.join("\n");
 }
 
+// Compact one-line "<count> · <first>/<completed>" for inline display.
+function formatRowMetaSummary(requestCount, firstMs, completedMs) {
+  const parts = [];
+  if (requestCount > 0) {
+    parts.push(String(requestCount));
+  }
+  const firstText = formatDuration(firstMs);
+  const completedText = formatDuration(completedMs);
+  if (firstText || completedText) {
+    parts.push(`${firstText || "-"}/${completedText || "..."}`);
+  }
+  return parts.join(" · ");
+}
+
 let metaTooltipEl = null;
 function showMetaTooltip(tr) {
   const meta = tr._meta;
@@ -652,6 +666,16 @@ function makeRow(isFirst, tuple) {
     badge.textContent = String(errorStatus);
     badge.title = `Last error status: ${errorStatus}`;
     geoStateTd.appendChild(badge);
+  }
+
+  // Visible request-count + timing, compact and dim (sibling of the clipped
+  // geo text, so it never gets ellipsized away).
+  const metaSummary = formatRowMetaSummary(requestCount, firstMs, completedMs);
+  if (metaSummary) {
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "rowMeta";
+    metaSpan.textContent = metaSummary;
+    geoStateTd.appendChild(metaSpan);
   }
 
   // Row-level meta drives the custom hover tooltip (count + timing).
