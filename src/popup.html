@@ -41,30 +41,29 @@ body {
    so this draws a vertical line to fake the "zeroth" column. */
 table {
   --cache-min-width: 0px;
-  background-image: linear-gradient(to right, transparent 0 27px, #d0d7de 27px 28px, transparent 28px);
-  border: 1px solid #d0d7de;
+  border: 1px solid #e1e4e8;
   border-radius: 8px;
   border-spacing: 0;
-  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.18);
+  box-shadow: 0 2px 8px rgba(140, 149, 159, 0.12);
   overflow: hidden;
 }
 td, tr {
   border-width: 0;
   border-collapse: separate;
-  border-color: #d0d7de;
+  border-color: #eaecef;
   border-style: solid;
-  padding: 4px 8px;
+  padding: 6px 10px;
   white-space: nowrap;
   user-select: none;
 }
 tr {
-  height: 28px;
+  height: 30px;
 }
 tr + tr td {
   border-top-width: 1px;
 }
 tr:hover {
-  background-color: #eef6ff;
+  background-color: #f3f6fb;
 }
 img {
   user-select: none;
@@ -240,12 +239,11 @@ img {
     background-color: #1f6feb;
   }
   table {
-    background-image: linear-gradient(to right, transparent 0 27px, #30363d 27px 28px, transparent 28px);
-    border-color: #30363d;
-    box-shadow: 0 8px 24px rgba(1, 4, 9, 0.35);
+    border-color: #2a2f37;
+    box-shadow: 0 2px 8px rgba(1, 4, 9, 0.4);
   }
   td, tr {
-    border-color: #30363d;
+    border-color: #21262d;
   }
   tr:hover {
     background-color: #161b22;
