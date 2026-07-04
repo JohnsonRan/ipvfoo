@@ -234,6 +234,12 @@ window.onload = async function() {
   table = document.getElementById("addr_table");
   table.onmousedown = handleMouseDown;
 
+  // Fires whenever the content's natural size changes (rows added,
+  // geo text updated, beg/spill visibility toggled), so no manual
+  // resize calls are needed at each mutation site.
+  new ResizeObserver(resizePopupToContent)
+      .observe(document.querySelector(".border"));
+
   if (/^[0-9]+$/.test(tabId)) {
     await beg();
     connectToExtension();
@@ -246,7 +252,7 @@ window.onload = async function() {
       ["ipv4.example.com", "192.0.2.9", "4", DFLAG_NOSSL, 126, 1390],
       ["cached.example.com", "2001:db8::f00", "6", DFLAG_SSL | DFLAG_NOSSL | AFLAG_CACHE, 9, 9],
     ];
-    pushAll(TEST_TUPLES, "646", REGULAR_COLOR, 0);
+    pushAll(TEST_TUPLES, REGULAR_COLOR, 0);
   }
 };
 
@@ -299,7 +305,6 @@ async function beg() {
   }
   const button = document.getElementById("beg");
   button.style.display = "block";  // visible
-  resizePopupToContent();
   button.addEventListener("click", async () => {
     // We need to close the popup before awaiting, otherwise
     // Firefox (at least version 116 on Windows) renders the
@@ -317,11 +322,11 @@ function connectToExtension() {
     //console.log("onMessage", msg.cmd, msg);
     switch (msg.cmd) {
       case "pushAll":
-        return pushAll(msg.tuples, msg.pattern, msg.color, msg.spillCount);
+        return pushAll(msg.tuples, msg.color, msg.spillCount);
       case "pushOne":
         return pushOne(msg.tuple);
       case "pushPattern":
-        return pushPattern(msg.pattern, msg.color);
+        return pushColor(msg.color);
       case "pushSpillCount":
         return pushSpillCount(msg.spillCount);
       case "shake":
@@ -336,14 +341,13 @@ function connectToExtension() {
 }
 
 // Clear the table, and fill it with new data.
-function pushAll(tuples, pattern, color, spillCount) {
+function pushAll(tuples, color, spillCount) {
   removeChildren(table);
   for (let i = 0; i < tuples.length; i++) {
     table.appendChild(makeRow(i == 0, tuples[i]));
   }
-  pushPattern(pattern, color);
+  pushColor(color);
   pushSpillCount(spillCount);
-  resizePopupToContent();
 }
 
 // Insert or update a single table row.
@@ -367,11 +371,10 @@ function pushOne(tuple) {
   // No exact match.  Insert the row in alphabetical order.
   table.insertBefore(makeRow(false, tuple), insertHere);
   scrollbarHack();
-  resizePopupToContent();
 }
 
 let lastColor = "";  // regular/incognito color scheme
-function pushPattern(pattern, color) {
+function pushColor(color) {
   if (lastColor != color) {
     lastColor = color;
     setColorIsDarkMode(lastColor, darkMode);
@@ -385,7 +388,6 @@ function pushSpillCount(count) {
   removeChildren(document.getElementById("spill_count")).appendChild(
       document.createTextNode(count));
   scrollbarHack();
-  resizePopupToContent();
 }
 
 // Shake the content (for 500ms) to signal an error.
@@ -538,12 +540,10 @@ function makeRow(isFirst, tuple) {
       geoTd.classList.remove("geoPending");
       geoTd.textContent = summary;
       geoTd.title = geoTitle(info) || summary;
-      resizePopupToContent();
     };
     const showGeoPending = () => {
       geoTd.classList.add("geoPending");
       geoTd.title = "Refreshing Geo cache...";
-      resizePopupToContent();
     };
     geoTd.classList.add("geoRefreshable");
     geoTd.onclick = () => geoInfoQueue.refresh(addr, showGeoInfo, showGeoPending);

@@ -17,7 +17,6 @@ limitations under the License.
 -->
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style type="text/css">
 html,
 body {
@@ -40,7 +39,6 @@ body {
 /* We want copy-paste to keep the domain in the first column,
    so this draws a vertical line to fake the "zeroth" column. */
 table {
-  --cache-min-width: 0px;
   background-image: linear-gradient(to right, transparent 0 27px, #d0d7de 27px 28px, transparent 28px);
   border: 1px solid #d0d7de;
   border-radius: 8px;
@@ -96,7 +94,6 @@ img {
 .cacheTd {
   border-left-width: 0;
   text-align: right;
-  min-width: var(--cache-min-width);
 }
 .cacheTd img {
   opacity: 0.72;
